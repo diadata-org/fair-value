@@ -27,6 +27,7 @@ func main() {
 	// bunnihub
 	// poolID for UniV4 pool manager: 0x5e5bc151fdb581faf0c28ae30ceba9193da793ccd7c22a70d3feaf3408c07666
 	scraper := scrapers.NewIScraper("CONTRACT_EXCHANGE_RATE", models.UNICHAIN, "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c", "0x5e5bc151fdb581faf0c28ae30ceba9193da793ccd7c22a70d3feaf3408c07666")
+
 	go handleData(scraper.DataChannel(), &wg)
 
 }
@@ -38,5 +39,7 @@ func handleData(dataChannel chan scrapers.FairValueData, wg *sync.WaitGroup) {
 	log.Info("start handling data...")
 	for d := range dataChannel {
 		log.Info("channel out: ", d)
+		// This should be the final line of main (blocking call)
+		// onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, chainID, filtersChannel)
 	}
 }

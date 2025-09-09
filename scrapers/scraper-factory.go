@@ -35,8 +35,14 @@ func NewIScraper(feedType string, blockchain string, address string, params ...a
 
 		scraper := NewINetAssetValue(blockchain, address, params)
 
-		// Processing of cer.Methods to final fair value.
-		scraper.DataChannel() <- MakeNAVData(scraper, address, blockchain)
+		// Processing of nav.Methods to final fair value.
+		ticker := time.NewTicker(20 * time.Second)
+		go func() {
+			for range ticker.C {
+				scraper.DataChannel() <- MakeNAVData(scraper, address, blockchain)
+			}
+		}()
+
 		return scraper
 
 	}

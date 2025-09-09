@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// TO DO: This should be moved to models.
+
 // NOTE: All big return values have 18 decimals.
 // If the boolean native is set to true, values are considered to be supply.
 // Otherwise, values are USD denominations.
