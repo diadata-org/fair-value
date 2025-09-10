@@ -14,15 +14,26 @@ import (
 
 // NewIScraper is the factory function for the basic Scraper interface.
 // @params is a set of optional parameters such as poolID for bunnihub UniV4 pools.
-func NewIScraper(feedType string, blockchain string, address string, params ...any) IScraper {
+func NewIScraper(feedType string, blockchain string, address string, updateSeconds int, params []any) IScraper {
 	switch feedType {
 
 	case "CONTRACT_EXCHANGE_RATE":
 
 		scraper := NewIContractExchangeRate(blockchain, address, params)
 
+		// TO DO: add select for scraper close
+		// ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
+		// go func() {
+		// 	select {
+		// 	case <-ticker.C:
+		// 		scraper.DataChannel() <- MakeCERData(scraper, address, blockchain)
+		// 	case <-scraper.Close():
+		// 		return
+		// 	}
+
+		// }()
 		// Processing of cer.Methods to final fair value.
-		ticker := time.NewTicker(20 * time.Second)
+		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
 		go func() {
 			for range ticker.C {
 				scraper.DataChannel() <- MakeCERData(scraper, address, blockchain)
@@ -36,7 +47,7 @@ func NewIScraper(feedType string, blockchain string, address string, params ...a
 		scraper := NewINetAssetValue(blockchain, address, params)
 
 		// Processing of nav.Methods to final fair value.
-		ticker := time.NewTicker(20 * time.Second)
+		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
 		go func() {
 			for range ticker.C {
 				scraper.DataChannel() <- MakeNAVData(scraper, address, blockchain)
@@ -60,6 +71,8 @@ func NewIContractExchangeRate(blockchain string, address string, params []any) I
 	switch asset {
 	// mbTON
 	case models.Asset{Blockchain: "TON", Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY"}:
+
+		log.Info("start mbTON scraper.")
 		cer := NewBMTonScraper(blockchain, address)
 
 		totalUnderlying, _, err := cer.TotalUnderlying()
@@ -82,6 +95,7 @@ func NewIContractExchangeRate(blockchain string, address string, params []any) I
 	// Bunnihub
 	case models.Asset{Blockchain: models.UNICHAIN, Address: "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"}:
 
+		log.Info("start bunnihub scraper. ")
 		cer := NewBunnihubScraper(blockchain, address, params)
 
 		return cer
@@ -95,6 +109,7 @@ func NewINetAssetValue(blockchain string, address string, params []any) INetAsse
 
 	switch asset {
 	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x1db1591540d7a6062be0837ca3c808add28844f6"}:
+		log.Info("start hOHM scraper.")
 
 		// TO DO: How do we deal with same asset/contract but different parameters?
 		// Example: alphagrowth where asset is given by pool id but uni pool manager address is the same:

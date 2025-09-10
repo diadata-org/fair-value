@@ -1,0 +1,63 @@
+package models
+
+import (
+	"encoding/json"
+	"reflect"
+
+	"github.com/diadata-org/fair-value/utils"
+)
+
+type FeedConfig struct {
+	FeedType      string `json:"Feed_Type"`
+	Address       string `json:"Address"`
+	Blockchain    string `json:"Blockchain"`
+	UpdateSeconds int    `json:"Update_Seconds"`
+	Params        []any  `json:"Params"`
+}
+
+func GetDiffConfig(fcOld, fcNew []FeedConfig) (plus []FeedConfig, minus []FeedConfig) {
+
+	for _, fc := range fcOld {
+		if !fc.Contained(fcNew) {
+			minus = append(minus, fc)
+		}
+	}
+
+	for _, fc := range fcNew {
+		if !fc.Contained(fcOld) {
+			plus = append(plus, fc)
+		}
+	}
+	return
+}
+
+// Contained returns true when @fc is contained in @fcSlice.
+func (fc *FeedConfig) Contained(fcSlice []FeedConfig) bool {
+	for _, item := range fcSlice {
+		if fc.IsEqual(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func (fc *FeedConfig) IsEqual(fc1 FeedConfig) bool {
+	return reflect.DeepEqual(*fc, fc1)
+}
+
+func GetFeedsFromConfig(filename string) ([]FeedConfig, error) {
+	data, err := utils.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	type feedConfigs struct {
+		Feeds []FeedConfig `json:"Feeds"`
+	}
+	var fc feedConfigs
+	err = json.Unmarshal(data, &fc)
+	if err != nil {
+		return nil, err
+	}
+	return fc.Feeds, nil
+}

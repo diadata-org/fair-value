@@ -144,6 +144,11 @@ func (scraper *HohmScraper) DataChannel() chan FairValueData {
 	return scraper.dataChannel
 }
 
+// TO DO
+func (scraper *HohmScraper) Close() chan bool {
+	return scraper.BaseScraper.Close()
+}
+
 // getOhmTokensBalances returns assets and liabilities for hohm contract.
 func (scraper *HohmScraper) getHohmTokensBalances() (tokens struct {
 	Assets      []common.Address

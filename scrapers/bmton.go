@@ -53,6 +53,11 @@ func (scraper *BMTonScraper) DataChannel() chan FairValueData {
 	return scraper.dataChannel
 }
 
+// TO DO
+func (scraper *BMTonScraper) Close() chan bool {
+	return scraper.BaseScraper.Close()
+}
+
 func getBmtonExecutionResult() (result *ton.ExecutionResult, err error) {
 
 	// Connect to TON mainnet

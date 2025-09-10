@@ -36,6 +36,7 @@ type BunnihubScraper struct {
 }
 
 func NewBunnihubScraper(blockchain string, address string, params []any) *BunnihubScraper {
+
 	scraper := BunnihubScraper{
 		BaseScraper:     NewBaseScraper(),
 		blockchain:      blockchain,
@@ -107,4 +108,9 @@ func (scraper *BunnihubScraper) TotalShares() (totalSupply *big.Int, err error) 
 
 func (scraper *BunnihubScraper) DataChannel() chan FairValueData {
 	return scraper.dataChannel
+}
+
+// TO DO
+func (scraper *BunnihubScraper) Close() chan bool {
+	return scraper.BaseScraper.Close()
 }

@@ -17,6 +17,7 @@ const (
 
 type IScraper interface {
 	DataChannel() chan FairValueData
+	Close() chan bool
 }
 
 type IContractExchangeRate interface {
