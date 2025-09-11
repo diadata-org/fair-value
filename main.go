@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"time"
 
 	"github.com/diadata-org/fair-value/models"
 	"github.com/diadata-org/fair-value/scrapers"
@@ -29,12 +30,20 @@ func main() {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
-	allIscrapers := make(map[*models.FeedConfig]scrapers.IScraper)
+	allIscrapers := make(map[string]scrapers.IScraper)
 	for _, f := range feedConfigs {
-		allIscrapers[&f] = scrapers.NewIScraper(f.FeedType, f.Blockchain, f.Address, f.UpdateSeconds, f.Params)
+		allIscrapers[f.FeedConfigIdentifier()] = scrapers.NewIScraper(f.FeedType, f.Blockchain, f.Address, f.UpdateSeconds, f.Params)
 		wg.Add(1)
-		go handleData(allIscrapers[&f].DataChannel(), &wg)
+		go handleData(allIscrapers[f.FeedConfigIdentifier()].DataChannel(), &wg)
 	}
+
+	// TEST
+	go func() {
+		configTicker := time.NewTicker(time.Duration(1 * time.Minute))
+		for range configTicker.C {
+			allIscrapers["CONTRACT_EXCHANGE_RATE-Unichain-0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"].Close() <- true
+		}
+	}()
 
 	// go func() {
 	// 	configTicker := time.NewTicker(time.Duration(1 * time.Minute))

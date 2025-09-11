@@ -20,6 +20,20 @@ type IScraper interface {
 	Close() chan bool
 }
 
+// func MakeData(feedType string, address string, blockchain string, params []any) FairValueData {
+
+// 	switch feedType {
+// 	case "CONTRACT_EXCHANGE_RATE":
+// 		scraper := NewIContractExchangeRate(blockchain, address, params)
+// 		return MakeCERData(scraper, address, blockchain)
+
+// 	case "NET_ASSET_VALUE":
+// 		scraper := NewINetAssetValue(blockchain, address, params)
+// 		return MakeNAVData(scraper, address, blockchain)
+// 	}
+// 	return FairValueData{}
+// }
+
 type IContractExchangeRate interface {
 	IScraper
 	TotalUnderlying() (*big.Int, bool, error)

@@ -7,12 +7,33 @@ import (
 	"github.com/diadata-org/fair-value/utils"
 )
 
+const FEED_CONFIG_SEPARATOR = "-"
+
 type FeedConfig struct {
 	FeedType      string `json:"Feed_Type"`
 	Address       string `json:"Address"`
 	Blockchain    string `json:"Blockchain"`
 	UpdateSeconds int    `json:"Update_Seconds"`
 	Params        []any  `json:"Params"`
+}
+
+// TO DO: How to address @Params? Can we assume Params[0] is always the feed differentiator?
+func (fc *FeedConfig) FeedConfigIdentifier() string {
+	return fc.FeedType + FEED_CONFIG_SEPARATOR + fc.Blockchain + FEED_CONFIG_SEPARATOR + fc.Address
+}
+
+// Contained returns true when @fc is contained in @fcSlice.
+func (fc *FeedConfig) Contained(fcSlice []FeedConfig) bool {
+	for _, item := range fcSlice {
+		if fc.IsEqual(item) {
+			return true
+		}
+	}
+	return false
+}
+
+func (fc *FeedConfig) IsEqual(fc1 FeedConfig) bool {
+	return reflect.DeepEqual(*fc, fc1)
 }
 
 func GetDiffConfig(fcOld, fcNew []FeedConfig) (plus []FeedConfig, minus []FeedConfig) {
@@ -29,20 +50,6 @@ func GetDiffConfig(fcOld, fcNew []FeedConfig) (plus []FeedConfig, minus []FeedCo
 		}
 	}
 	return
-}
-
-// Contained returns true when @fc is contained in @fcSlice.
-func (fc *FeedConfig) Contained(fcSlice []FeedConfig) bool {
-	for _, item := range fcSlice {
-		if fc.IsEqual(item) {
-			return true
-		}
-	}
-	return false
-}
-
-func (fc *FeedConfig) IsEqual(fc1 FeedConfig) bool {
-	return reflect.DeepEqual(*fc, fc1)
 }
 
 func GetFeedsFromConfig(filename string) ([]FeedConfig, error) {

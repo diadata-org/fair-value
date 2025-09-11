@@ -22,21 +22,16 @@ func NewIScraper(feedType string, blockchain string, address string, updateSecon
 		scraper := NewIContractExchangeRate(blockchain, address, params)
 
 		// TO DO: add select for scraper close
-		// ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
-		// go func() {
-		// 	select {
-		// 	case <-ticker.C:
-		// 		scraper.DataChannel() <- MakeCERData(scraper, address, blockchain)
-		// 	case <-scraper.Close():
-		// 		return
-		// 	}
-
-		// }()
-		// Processing of cer.Methods to final fair value.
 		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
 		go func() {
-			for range ticker.C {
-				scraper.DataChannel() <- MakeCERData(scraper, address, blockchain)
+			for {
+				select {
+				case <-ticker.C:
+					scraper.DataChannel() <- MakeCERData(scraper, address, blockchain)
+				case <-scraper.Close():
+					log.Error("Close scraper!")
+					return
+				}
 			}
 		}()
 
@@ -49,8 +44,14 @@ func NewIScraper(feedType string, blockchain string, address string, updateSecon
 		// Processing of nav.Methods to final fair value.
 		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
 		go func() {
-			for range ticker.C {
-				scraper.DataChannel() <- MakeNAVData(scraper, address, blockchain)
+			for {
+				select {
+				case <-ticker.C:
+					scraper.DataChannel() <- MakeNAVData(scraper, address, blockchain)
+				case <-scraper.Close():
+					log.Error("Close scraper!")
+					return
+				}
 			}
 		}()
 
