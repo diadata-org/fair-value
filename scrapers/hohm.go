@@ -56,14 +56,14 @@ func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err e
 
 	assetValueUSD = new(big.Int)
 	for i, token := range tokens.Assets {
-		log.Infof("asset address: %s", token.Hex())
+		// log.Infof("asset address: %s", token.Hex())
 		supply := balances.TotalAssets[i]
 		// TO DO: Get price from lumina metacontract.
 		price, err := utils.GetDiaQuotationPrice("Ethereum", token.Hex())
 		if err != nil {
 			log.Fatalf("failed to fetch price for %s: %v", token.Hex(), err)
 		}
-		log.Infof("assets supply -- price: %s -- %v", supply.String(), price)
+		// log.Infof("assets supply -- price: %s -- %v", supply.String(), price)
 
 		// Scale price and supply to big.Float.
 		priceBig := big.NewFloat(0).Mul(big.NewFloat(price), new(big.Float).SetFloat64(math.Pow10(int(DECIMALS))))
@@ -94,14 +94,14 @@ func (scraper *HohmScraper) Liabilities() (liabilitiesValueUSD *big.Int, native 
 
 	liabilitiesValueUSD = new(big.Int)
 	for i, token := range tokens.Liabilities {
-		log.Infof("liability address: %s", token.Hex())
+		// log.Infof("liability address: %s", token.Hex())
 		supply := balances.TotalLiabilities[i]
 		// TO DO: Get price from lumina metacontract.
 		price, err := utils.GetDiaQuotationPrice("Ethereum", token.Hex())
 		if err != nil {
 			log.Fatalf("failed to fetch price for %s: %v", token.Hex(), err)
 		}
-		log.Infof("assets supply -- price: %s -- %v", supply.String(), price)
+		// log.Infof("assets supply -- price: %s -- %v", supply.String(), price)
 
 		// Scale price and supply to big.Float.
 		priceBig := big.NewFloat(0).Mul(big.NewFloat(price), new(big.Float).SetFloat64(math.Pow10(int(DECIMALS))))

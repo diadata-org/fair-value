@@ -9,17 +9,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	CONFIG_UPDATE_SECONDS = 60
+)
+
 var feedConfigs, feedConfigsNew []models.FeedConfig
 
-// TO DO: Add config file (json) that determines ALL parameters needed for a scraper, i.e.
-// feedType, blockchain, contractAddress, restClient, ...?
-// main will go through the list of such entries and deploy the corresponding scraper.
-
 func main() {
-
-	// TO DO: Add routine that periodically fetches the configs and compares to deployed config.
-	// Whenever something is added to the config, also deploy it.
-	// For now, assume that configs are either added or removed, i.e. existing ones are not changed.
 
 	var err error
 	feedConfigs, err = models.GetFeedsFromConfig("fair-value-feeds.json")
@@ -31,45 +27,54 @@ func main() {
 	defer wg.Wait()
 
 	allIscrapers := make(map[string]scrapers.IScraper)
-	for _, f := range feedConfigs {
-		allIscrapers[f.FeedConfigIdentifier()] = scrapers.NewIScraper(f.FeedType, f.Blockchain, f.Address, f.UpdateSeconds, f.Params)
+	for _, config := range feedConfigs {
+		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config.FeedType, config.Blockchain, config.Address, config.UpdateSeconds, config.Params)
 		wg.Add(1)
-		go handleData(allIscrapers[f.FeedConfigIdentifier()].DataChannel(), &wg)
+		go handleData(allIscrapers[config.FeedConfigIdentifier()].DataChannel(), &wg)
 	}
 
-	// TEST
+	// Routine that periodically fetches the configs and compares to deployed config.
+	// Whenever something is added to the config, also deploy it.
+	// For now, assume that configs are either added or removed, i.e. existing ones are not changed.
 	go func() {
-		configTicker := time.NewTicker(time.Duration(1 * time.Minute))
+		configTicker := time.NewTicker(time.Duration(time.Duration(CONFIG_UPDATE_SECONDS) * time.Second))
+
 		for range configTicker.C {
-			allIscrapers["CONTRACT_EXCHANGE_RATE-Unichain-0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"].Close() <- true
+			feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json")
+			if err != nil {
+				log.Error("GetFeedsFromConfig: ", err)
+			}
+			plus, minus := models.GetDiffConfig(feedConfigs, feedConfigsNew)
+
+			// TO DO: Test - remove when done.
+			minus = []models.FeedConfig{{
+				FeedType:   "CONTRACT_EXCHANGE_RATE",
+				Blockchain: models.UNICHAIN,
+				Address:    "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c",
+			},
+			}
+			// TO DO: Test plus as well.
+			log.Warnf("plus -- minus: %v -- %v", plus, minus)
+
+			// Close scrapers of removedd configs.
+			for _, config := range minus {
+				allIscrapers[config.FeedConfigIdentifier()].Close() <- true
+				delete(allIscrapers, config.FeedConfigIdentifier())
+			}
+
+			// Add scraper for added configs.
+			for _, config := range plus {
+				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config.FeedType, config.Blockchain, config.Address, config.UpdateSeconds, config.Params)
+				wg.Add(1)
+				go handleData(allIscrapers[config.FeedConfigIdentifier()].DataChannel(), &wg)
+			}
 		}
 	}()
 
-	// go func() {
-	// 	configTicker := time.NewTicker(time.Duration(1 * time.Minute))
-	// 	for range configTicker.C {
-	// 		feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json")
-	// 		if err != nil {
-	// 			log.Error("GetFeedsFromConfig: ", err)
-	// 		}
-	// 	}
-	// 	plus, minus := models.GetDiffConfig(feedConfigs, feedConfigsNew)
-	// 	log.Infof("plus -- minus: %v -- %v", plus, minus)
-	// 	for _, config := range feedConfigsNew {
-	// 		allIscrapers[&config].Close()
-	// 	}
-	// }()
-
-	// hOHM
-	// scraper := scrapers.NewIScraper("NET_ASSET_VALUE", "Ethereum", "0x1db1591540d7a6062be0837ca3c808add28844f6")
-
-	// bunnihub
-	// poolID for UniV4 pool manager: 0x5e5bc151fdb581faf0c28ae30ceba9193da793ccd7c22a70d3feaf3408c07666
-	// scraper := scrapers.NewIScraper("CONTRACT_EXCHANGE_RATE", models.UNICHAIN, "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c", "0x5e5bc151fdb581faf0c28ae30ceba9193da793ccd7c22a70d3feaf3408c07666")
-
 }
 
-// TO DO: Forward price data to channel and write to contract here using handleData() function.
+// TO DO: Add onchain functionality.
+// Handles data from dataChannel.
 func handleData(dataChannel chan scrapers.FairValueData, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// TO DO: make select statement with graceful close.

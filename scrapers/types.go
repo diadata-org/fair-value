@@ -15,8 +15,24 @@ const (
 	DECIMALS = 18
 )
 
+type FairValueData struct {
+	Address    string
+	Blockchain string
+	Symbol     string
+	// Fair value price in USD.
+	PriceUSD float64
+	// Optional field if only 1 asset is involved.
+	FairValueNative float64
+	// Numerator
+	Numerator *big.Int
+	// Denominator
+	Denominator *big.Int
+	Time        time.Time
+}
+
 type IScraper interface {
 	DataChannel() chan FairValueData
+	// TO DO: Should we make this Close() error and implement Close() on scraper level as closeChannel <- true?
 	Close() chan bool
 }
 
@@ -46,7 +62,7 @@ type IReserveBacking interface {
 	Supply() (*big.Int, bool, error)
 }
 
-// TO DO: Maybe better to add another interface method Native()?
+// TO DO: Maybe better to add another interface method Native() bool?
 // Because I think either both - Assets AND Liabilities are native or not. Total supply should always(?) be native.
 type INetAssetValue interface {
 	IScraper
@@ -68,7 +84,7 @@ func MakeCERData(scraper IContractExchangeRate, address string, blockchain strin
 		log.Error("TotalShares: ", err)
 	}
 
-	log.Infof("underlying -- totalShares: %s -- %s", underlying.String(), totalShares.String())
+	// log.Infof("underlying -- totalShares: %s -- %s", underlying.String(), totalShares.String())
 
 	numeratorFloat := big.NewFloat(0).SetInt(underlying)
 	denominatorFloat := big.NewFloat(0).SetInt(totalShares)
@@ -80,8 +96,8 @@ func MakeCERData(scraper IContractExchangeRate, address string, blockchain strin
 	data.Denominator = totalShares
 	data.PriceUSD, _ = price.Float64()
 	data.Time = time.Now()
-	log.Info("price: ", data.PriceUSD)
-	log.Info("data: ", data)
+	// log.Info("price: ", data.PriceUSD)
+	// log.Info("data: ", data)
 
 	return
 }
@@ -116,19 +132,4 @@ func MakeNAVData(scraper INetAssetValue, address string, blockchain string) (dat
 	data.Time = time.Now()
 
 	return
-}
-
-type FairValueData struct {
-	Address    string
-	Blockchain string
-	Symbol     string
-	// Fair value price in USD.
-	PriceUSD float64
-	// Optional field if only 1 asset is involved.
-	FairValueNative float64
-	// Numerator
-	Numerator *big.Int
-	// Denominator
-	Denominator *big.Int
-	Time        time.Time
 }

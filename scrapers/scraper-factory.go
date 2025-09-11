@@ -21,7 +21,7 @@ func NewIScraper(feedType string, blockchain string, address string, updateSecon
 
 		scraper := NewIContractExchangeRate(blockchain, address, params)
 
-		// TO DO: add select for scraper close
+		// Processing of CER data for final value.
 		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
 		go func() {
 			for {
@@ -115,6 +115,7 @@ func NewINetAssetValue(blockchain string, address string, params []any) INetAsse
 		// TO DO: How do we deal with same asset/contract but different parameters?
 		// Example: alphagrowth where asset is given by pool id but uni pool manager address is the same:
 		// https://github.com/diadata-org/diadata-monitoring/blob/inspector-v2/experiments/funadmental_price_alphagrowth.py
+		// Answer: use params.
 		nav := NewHohmScraper(blockchain, address, params)
 
 		return nav
