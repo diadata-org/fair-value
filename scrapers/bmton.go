@@ -23,15 +23,16 @@ type BMTonScraper struct {
 	BaseScraper
 	blockchain      string
 	contractAddress string
+	config          models.FeedConfig
 }
 
-func NewBMTonScraper(blockchain string, address string) *BMTonScraper {
+func NewBMTonScraper(config models.FeedConfig) *BMTonScraper {
 	return &BMTonScraper{
 		BaseScraper:     NewBaseScraper(),
-		blockchain:      blockchain,
-		contractAddress: address,
+		blockchain:      config.Blockchain,
+		contractAddress: config.Address,
+		config:          config,
 	}
-
 }
 
 func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, totalTonValue *big.Int, err error) {
@@ -59,6 +60,10 @@ func (scraper *BMTonScraper) DataChannel() chan models.FairValueData {
 // TO DO
 func (scraper *BMTonScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
+}
+
+func (scraper *BMTonScraper) GetConfig() models.FeedConfig {
+	return scraper.config
 }
 
 func getBmtonExecutionResult() (result *ton.ExecutionResult, err error) {

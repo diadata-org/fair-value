@@ -23,20 +23,23 @@ type SatusdScraper struct {
 	contractAddress common.Address
 	poolID          common.Hash
 	lpTokenAddress  common.Address
+	config          models.FeedConfig
 }
 
-func NewSatusdScraper(blockchain string, address string, params []any) *SatusdScraper {
+func NewSatusdScraper(config models.FeedConfig) *SatusdScraper {
 
 	scraper := SatusdScraper{
 		BaseScraper:     NewBaseScraper(),
-		blockchain:      blockchain,
-		contractAddress: common.HexToAddress(address),
-	}
-	if len(params) > 0 {
-		scraper.poolID = common.HexToHash(params[0].(string))
+		blockchain:      config.Blockchain,
+		contractAddress: common.HexToAddress(config.Address),
+		config:          config,
 	}
 
-	scraper.lpTokenAddress = common.HexToAddress(address)
+	if len(config.Params) > 0 {
+		scraper.poolID = common.HexToHash(config.Params[0].(string))
+	}
+
+	scraper.lpTokenAddress = common.HexToAddress(config.Address)
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SATUSD", ""))
 	if err != nil {
@@ -67,7 +70,7 @@ func (scraper *SatusdScraper) TotalUnderlying() (totalUnderlying *big.Int, total
 	}
 	// Scaled sum of values.
 	totalValueUnderlying, _ = new(big.Float).Mul(big.NewFloat(0).SetInt(totalUnderlying), big.NewFloat(satusdPrice)).Int(nil)
-	log.Info("satUSD total value underlying: ", totalValueUnderlying)
+	log.Debug("satUSD total value underlying: ", totalValueUnderlying)
 
 	return
 }
@@ -82,6 +85,10 @@ func (scraper *SatusdScraper) TotalShares() (*big.Int, error) {
 
 func (scraper *SatusdScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
+}
+
+func (scraper *SatusdScraper) GetConfig() models.FeedConfig {
+	return scraper.config
 }
 
 // TO DO

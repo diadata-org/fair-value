@@ -27,26 +27,30 @@ type HohmScraper struct {
 	contractAddress string
 	client          *ethclient.Client
 	hohmCaller      *hohm.HohmCaller
+	config          models.FeedConfig
 }
 
-func NewHohmScraper(blockchain string, address string, params []any) *HohmScraper {
+func NewHohmScraper(config models.FeedConfig) *HohmScraper {
 	rpcNode := "https://eth.drpc.org"
 	client, err := ethclient.Dial(rpcNode)
 	if err != nil {
 		log.Fatalf("failed to connect to Ethereum RPC: %v", err)
 	}
-	hohmCaller, err := hohm.NewHohmCaller(common.HexToAddress(address), client)
+	hohmCaller, err := hohm.NewHohmCaller(common.HexToAddress(config.Address), client)
 	if err != nil {
 		log.Fatalf("NewHohmCaller: %v", err)
 	}
 
-	return &HohmScraper{
+	scraper := HohmScraper{
 		BaseScraper:     NewBaseScraper(),
-		blockchain:      blockchain,
-		contractAddress: address,
+		blockchain:      config.Blockchain,
+		contractAddress: config.Address,
 		client:          client,
 		hohmCaller:      hohmCaller,
+		config:          config,
 	}
+
+	return &scraper
 }
 
 func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err error) {
@@ -148,6 +152,10 @@ func (scraper *HohmScraper) DataChannel() chan models.FairValueData {
 // TO DO
 func (scraper *HohmScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
+}
+
+func (scraper *HohmScraper) GetConfig() models.FeedConfig {
+	return scraper.config
 }
 
 // getOhmTokensBalances returns assets and liabilities for hohm contract.

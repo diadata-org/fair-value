@@ -14,20 +14,20 @@ import (
 
 // NewIScraper is the factory function for the basic Scraper interface.
 // @params is a set of optional parameters such as poolID for bunnihub UniV4 pools.
-func NewIScraper(feedType string, blockchain string, address string, updateSeconds int, params []any) IScraper {
-	switch feedType {
+func NewIScraper(config models.FeedConfig) IScraper {
+	switch config.FeedType {
 
 	case "CONTRACT_EXCHANGE_RATE":
 
-		scraper := NewIContractExchangeRate(blockchain, address, params)
+		scraper := NewIContractExchangeRate(config)
 
 		// Processing of CER data for final value.
-		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
+		ticker := time.NewTicker(time.Duration(config.UpdateSeconds) * time.Second)
 		go func() {
 			for {
 				select {
 				case <-ticker.C:
-					scraper.DataChannel() <- MakeCERData(scraper, address, blockchain)
+					scraper.DataChannel() <- MakeCERData(scraper)
 				case <-scraper.Close():
 					log.Error("Close scraper!")
 					return
@@ -39,15 +39,15 @@ func NewIScraper(feedType string, blockchain string, address string, updateSecon
 
 	case "NET_ASSET_VALUE":
 
-		scraper := NewINetAssetValue(blockchain, address, params)
+		scraper := NewINetAssetValue(config)
 
 		// Processing of nav.Methods to final fair value.
-		ticker := time.NewTicker(time.Duration(updateSeconds) * time.Second)
+		ticker := time.NewTicker(time.Duration(config.UpdateSeconds) * time.Second)
 		go func() {
 			for {
 				select {
 				case <-ticker.C:
-					scraper.DataChannel() <- MakeNAVData(scraper, address, blockchain)
+					scraper.DataChannel() <- MakeNAVData(scraper)
 				case <-scraper.Close():
 					log.Error("Close scraper!")
 					return
@@ -65,16 +65,16 @@ func NewIScraper(feedType string, blockchain string, address string, updateSecon
 // SPECIFIC FAIR VALUE SCRAPER FACTORIES
 // ---------------------------------------------------------------------------------
 
-func NewIContractExchangeRate(blockchain string, address string, params []any) IContractExchangeRate {
+func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 
-	asset := models.Asset{Blockchain: blockchain, Address: address}
+	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
 
 	switch asset {
 	// mbTON
 	case models.Asset{Blockchain: "TON", Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY"}:
 
 		log.Info("start mbTON scraper.")
-		cer := NewBMTonScraper(blockchain, address)
+		cer := NewBMTonScraper(config)
 
 		totalUnderlying, _, err := cer.TotalUnderlying()
 		if err != nil {
@@ -97,14 +97,14 @@ func NewIContractExchangeRate(blockchain string, address string, params []any) I
 	// satUSD+
 	case models.Asset{Blockchain: models.BINANCESMARTCHAIN, Address: "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872"}:
 		log.Info("start satUSD+ scraper.")
-		cer := NewSatusdScraper(blockchain, address, params)
+		cer := NewSatusdScraper(config)
 		return cer
 
 	// Bunnihub
 	case models.Asset{Blockchain: models.UNICHAIN, Address: "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"}:
 
 		log.Info("start bunnihub scraper.")
-		cer := NewBunnihubScraper(blockchain, address, params)
+		cer := NewBunnihubScraper(config)
 
 		return cer
 	}
@@ -112,8 +112,8 @@ func NewIContractExchangeRate(blockchain string, address string, params []any) I
 	return nil
 }
 
-func NewINetAssetValue(blockchain string, address string, params []any) INetAssetValue {
-	asset := models.Asset{Blockchain: blockchain, Address: address}
+func NewINetAssetValue(config models.FeedConfig) INetAssetValue {
+	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
 
 	switch asset {
 	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x1db1591540d7a6062be0837ca3c808add28844f6"}:
@@ -123,7 +123,7 @@ func NewINetAssetValue(blockchain string, address string, params []any) INetAsse
 		// Example: alphagrowth where asset is given by pool id but uni pool manager address is the same:
 		// https://github.com/diadata-org/diadata-monitoring/blob/inspector-v2/experiments/funadmental_price_alphagrowth.py
 		// Answer: use params.
-		nav := NewHohmScraper(blockchain, address, params)
+		nav := NewHohmScraper(config)
 
 		return nav
 	}

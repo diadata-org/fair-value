@@ -28,14 +28,14 @@ func main() {
 
 	allIscrapers := make(map[string]scrapers.IScraper)
 	for _, config := range feedConfigs {
-		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config.FeedType, config.Blockchain, config.Address, config.UpdateSeconds, config.Params)
+		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config)
 		wg.Add(1)
 		go handleData(allIscrapers[config.FeedConfigIdentifier()].DataChannel(), &wg)
 	}
 
 	// Routine that periodically fetches the configs and compares to deployed config.
-	// Whenever something is added to the config, also deploy it.
-	// For now, assume that configs are either added or removed, i.e. existing ones are not changed.
+	// Whenever something is added to or removed from the config, either deploy or close it.
+	// For now, assume that configs are either added or removed, i.e. existing ones cannot be changed.
 	go func() {
 		configTicker := time.NewTicker(time.Duration(time.Duration(CONFIG_UPDATE_SECONDS) * time.Second))
 
@@ -56,15 +56,17 @@ func main() {
 			// TO DO: Test plus as well.
 			log.Warnf("plus -- minus: %v -- %v", plus, minus)
 
-			// Close scrapers of removedd configs.
+			// Close scrapers of removed configs.
 			for _, config := range minus {
-				allIscrapers[config.FeedConfigIdentifier()].Close() <- true
-				delete(allIscrapers, config.FeedConfigIdentifier())
+				if _, ok := allIscrapers[config.FeedConfigIdentifier()]; ok {
+					allIscrapers[config.FeedConfigIdentifier()].Close() <- true
+					delete(allIscrapers, config.FeedConfigIdentifier())
+				}
 			}
 
 			// Add scraper for added configs.
 			for _, config := range plus {
-				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config.FeedType, config.Blockchain, config.Address, config.UpdateSeconds, config.Params)
+				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config)
 				wg.Add(1)
 				go handleData(allIscrapers[config.FeedConfigIdentifier()].DataChannel(), &wg)
 			}

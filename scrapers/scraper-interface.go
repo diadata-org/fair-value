@@ -19,6 +19,7 @@ type IScraper interface {
 	DataChannel() chan models.FairValueData
 	// TO DO: Should we make this Close() error and implement Close() on scraper level as closeChannel <- true?
 	Close() chan bool
+	GetConfig() models.FeedConfig
 }
 
 // TO DO: Better to make an overall data factory and switch inside?
@@ -62,7 +63,7 @@ type INetAssetValue interface {
 }
 
 // MAKECERData computes all return values for the IContractExchangeRate interface.
-func MakeCERData(scraper IContractExchangeRate, address string, blockchain string) (data models.FairValueData) {
+func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
 
 	underlying, underlyingValue, err := scraper.TotalUnderlying()
 	if err != nil {
@@ -74,7 +75,8 @@ func MakeCERData(scraper IContractExchangeRate, address string, blockchain strin
 		log.Error("TotalShares: ", err)
 	}
 
-	log.Debugf("underlying -- totalShares for address %s: %s -- %s", address, underlying.String(), totalShares.String())
+	config := scraper.GetConfig()
+	log.Debugf("underlying -- totalShares for address %s: %s -- %s", config.Address, underlying.String(), totalShares.String())
 
 	// Compute USD price
 	var priceUSD float64
@@ -92,21 +94,21 @@ func MakeCERData(scraper IContractExchangeRate, address string, blockchain strin
 		fairValueNative, _ = big.NewFloat(0).Quo(numeratorFloat, denominatorFloat).Float64()
 	}
 
-	data.Address = address
-	data.Blockchain = blockchain
+	data.Address = config.Address
+	data.Blockchain = config.Blockchain
 	data.Numerator = underlying
 	data.Denominator = totalShares
 	data.PriceUSD = priceUSD
 	data.FairValueNative = fairValueNative
 	data.Time = time.Now()
-	log.Debugf("price for address %s: %v", address, data.PriceUSD)
+	log.Debugf("price for address %s: %v", config.Address, data.PriceUSD)
 
 	return
 }
 
 // TO DO: Is this the best way to produce data?
 // MakeNAVData computes all return values for the INetAssetValue interface.
-func MakeNAVData(scraper INetAssetValue, address string, blockchain string) (data models.FairValueData) {
+func MakeNAVData(scraper INetAssetValue) (data models.FairValueData) {
 
 	assets, _, err := scraper.Assets()
 	if err != nil {
@@ -127,8 +129,8 @@ func MakeNAVData(scraper INetAssetValue, address string, blockchain string) (dat
 	denominator := big.NewFloat(0).SetInt(supply)
 	price := big.NewFloat(0).Quo(numeratorFloat, denominator)
 
-	data.Address = address
-	data.Blockchain = blockchain
+	data.Address = scraper.GetConfig().Address
+	data.Blockchain = scraper.GetConfig().Blockchain
 	data.Numerator = numerator
 	data.Denominator = supply
 	data.PriceUSD, _ = price.Float64()

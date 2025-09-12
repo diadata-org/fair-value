@@ -33,20 +33,23 @@ type BunnihubScraper struct {
 	contractAddress common.Address
 	poolID          common.Hash
 	lpTokenAddress  common.Address
+	config          models.FeedConfig
 }
 
-func NewBunnihubScraper(blockchain string, address string, params []any) *BunnihubScraper {
+func NewBunnihubScraper(config models.FeedConfig) *BunnihubScraper {
 
 	scraper := BunnihubScraper{
 		BaseScraper:     NewBaseScraper(),
-		blockchain:      blockchain,
-		contractAddress: common.HexToAddress(address),
-	}
-	if len(params) > 0 {
-		scraper.poolID = common.HexToHash(params[0].(string))
+		blockchain:      config.Blockchain,
+		contractAddress: common.HexToAddress(config.Address),
+		config:          config,
 	}
 
-	scraper.lpTokenAddress = common.HexToAddress(address)
+	if len(config.Params) > 0 {
+		scraper.poolID = common.HexToHash(config.Params[0].(string))
+	}
+
+	scraper.lpTokenAddress = common.HexToAddress(config.Address)
 
 	client, err := ethclient.Dial(RPC_NODE)
 	if err != nil {
@@ -108,6 +111,10 @@ func (scraper *BunnihubScraper) TotalShares() (totalSupply *big.Int, err error) 
 
 func (scraper *BunnihubScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
+}
+
+func (scraper *BunnihubScraper) GetConfig() models.FeedConfig {
+	return scraper.config
 }
 
 // TO DO
