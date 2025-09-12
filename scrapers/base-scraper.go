@@ -3,19 +3,19 @@ package scrapers
 import "github.com/diadata-org/fair-value/models"
 
 type BaseScraper struct {
-	dataChannel  chan FairValueData
+	dataChannel  chan models.FairValueData
 	closeChannel chan bool
 	config       models.FeedConfig
 }
 
 func NewBaseScraper() BaseScraper {
 	return BaseScraper{
-		dataChannel:  make(chan FairValueData),
+		dataChannel:  make(chan models.FairValueData),
 		closeChannel: make(chan bool),
 	}
 }
 
-func (b *BaseScraper) DataChannel() chan FairValueData {
+func (b *BaseScraper) DataChannel() chan models.FairValueData {
 	return b.dataChannel
 }
 

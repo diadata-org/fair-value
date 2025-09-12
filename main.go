@@ -75,10 +75,9 @@ func main() {
 
 // TO DO: Add onchain functionality.
 // Handles data from dataChannel.
-func handleData(dataChannel chan scrapers.FairValueData, wg *sync.WaitGroup) {
+func handleData(dataChannel chan models.FairValueData, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// TO DO: make select statement with graceful close.
-	log.Info("start handling data...")
 	for d := range dataChannel {
 		log.Info("channel out: ", d)
 		// This should be the final line of main (blocking call)

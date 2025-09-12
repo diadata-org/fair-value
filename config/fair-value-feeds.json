@@ -8,6 +8,12 @@
             "Params": ["0x5e5bc151fdb581faf0c28ae30ceba9193da793ccd7c22a70d3feaf3408c07666"]
         },
         {
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872",
+            "Blockchain": "BinanceSmartChain",
+            "Update_Seconds": 20
+        },
+        {
             "Feed_Type": "NET_ASSET_VALUE",
             "Address": "0x1db1591540d7a6062be0837ca3c808add28844f6",
             "Blockchain": "Ethereum",

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	diaOracleV2MultiupdateService "github.com/diadata-org/diadata/pkg/dia/scraper/blockchain-scrapers/blockchains/ethereum/diaOracleV2MultiupdateService"
-	"github.com/diadata-org/fair-value/scrapers"
+	"github.com/diadata-org/fair-value/models"
 	"github.com/diadata-org/fair-value/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -38,7 +38,7 @@ func OracleUpdateExecutor(
 	conn *ethclient.Client,
 	connBackup *ethclient.Client,
 	chainId int64,
-	dataChannel <-chan []scrapers.FairValueData,
+	dataChannel <-chan []models.FairValueData,
 ) {
 
 	for dataPoints := range dataChannel {

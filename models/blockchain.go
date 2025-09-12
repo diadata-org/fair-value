@@ -1,6 +1,7 @@
 package models
 
 const (
-	ETHEREUM = "Ethereum"
-	UNICHAIN = "Unichain"
+	BINANCESMARTCHAIN = "BinanceSmartChain"
+	ETHEREUM          = "Ethereum"
+	UNICHAIN          = "Unichain"
 )

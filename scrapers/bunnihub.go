@@ -58,7 +58,7 @@ func NewBunnihubScraper(blockchain string, address string, params []any) *Bunnih
 
 }
 
-func (scraper *BunnihubScraper) TotalUnderlying() (totalUnderlying *big.Int, native bool, err error) {
+func (scraper *BunnihubScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUnderlying *big.Int, err error) {
 	bunnihubCaller, err := univ4.NewUniv4poolmanagerCaller(common.HexToAddress(UNISWAPV4_POOL_MANAGER), scraper.client)
 	if err != nil {
 		return
@@ -92,7 +92,7 @@ func (scraper *BunnihubScraper) TotalUnderlying() (totalUnderlying *big.Int, nat
 	ethValue := new(big.Float).Mul(ethBalance, big.NewFloat(ethPrice))
 	usdcValue := new(big.Float).Mul(usdcBalance, big.NewFloat(usdcPrice))
 	totalValue := new(big.Float).Add(ethValue, usdcValue)
-	totalUnderlying, _ = new(big.Float).Mul(totalValue, new(big.Float).SetFloat64(math.Pow10(int(DECIMALS)))).Int(nil)
+	totalValueUnderlying, _ = new(big.Float).Mul(totalValue, new(big.Float).SetFloat64(math.Pow10(int(DECIMALS)))).Int(nil)
 
 	return
 }
@@ -106,7 +106,7 @@ func (scraper *BunnihubScraper) TotalShares() (totalSupply *big.Int, err error) 
 	return
 }
 
-func (scraper *BunnihubScraper) DataChannel() chan FairValueData {
+func (scraper *BunnihubScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
 }
 

@@ -5,10 +5,13 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/diadata-org/fair-value/models"
 	"github.com/xssnick/tonutils-go/address"
 	"github.com/xssnick/tonutils-go/liteclient"
 	"github.com/xssnick/tonutils-go/ton"
 )
+
+// ----------------------------- ON HOLD ----------------------------
 
 // ------------------------------------------------------------------
 // CONTRACT EXCHANGE RATE
@@ -31,7 +34,7 @@ func NewBMTonScraper(blockchain string, address string) *BMTonScraper {
 
 }
 
-func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, native bool, err error) {
+func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, totalTonValue *big.Int, err error) {
 	result, err := getBmtonExecutionResult()
 	if err != nil {
 		return
@@ -49,7 +52,7 @@ func (scraper *BMTonScraper) TotalShares() (totalBmton *big.Int, err error) {
 	return
 }
 
-func (scraper *BMTonScraper) DataChannel() chan FairValueData {
+func (scraper *BMTonScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
 }
 

@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 
+	"github.com/diadata-org/fair-value/models"
 	"github.com/diadata-org/fair-value/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -140,7 +141,7 @@ func (scraper *HohmScraper) TotalSupply() (scaledSupply *big.Int, err error) {
 	return
 }
 
-func (scraper *HohmScraper) DataChannel() chan FairValueData {
+func (scraper *HohmScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
 }
 
@@ -171,7 +172,3 @@ func (scraper *HohmScraper) getHohmTokensBalances() (tokens struct {
 	return
 
 }
-
-// // --- Step 4: compute hOHM price ---
-// hohmPrice := (shareAssetValueUSD - shareLiabilityValueUSD) / 1e30
-// fmt.Printf("hOHM Price: %.6f $ USD\n", hohmPrice)

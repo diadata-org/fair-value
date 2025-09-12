@@ -89,14 +89,21 @@ func NewIContractExchangeRate(blockchain string, address string, params []any) I
 		if err != nil {
 			log.Error("ComputeContractExchangeRatePrice: ", err)
 		}
-		fairValueData := FairValueData{Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY", Blockchain: "TON", FairValueNative: price, Time: time.Now()}
+		fairValueData := models.FairValueData{Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY", Blockchain: "TON", FairValueNative: price, Time: time.Now()}
 		cer.DataChannel() <- fairValueData
 
 		return cer
+
+	// satUSD+
+	case models.Asset{Blockchain: models.BINANCESMARTCHAIN, Address: "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872"}:
+		log.Info("start satUSD+ scraper.")
+		cer := NewSatusdScraper(blockchain, address, params)
+		return cer
+
 	// Bunnihub
 	case models.Asset{Blockchain: models.UNICHAIN, Address: "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"}:
 
-		log.Info("start bunnihub scraper. ")
+		log.Info("start bunnihub scraper.")
 		cer := NewBunnihubScraper(blockchain, address, params)
 
 		return cer
