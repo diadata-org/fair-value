@@ -94,6 +94,7 @@ func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
 		fairValueNative, _ = big.NewFloat(0).Quo(numeratorFloat, denominatorFloat).Float64()
 	}
 
+	data.Symbol = config.Symbol
 	data.Address = config.Address
 	data.Blockchain = config.Blockchain
 	data.Numerator = underlying
@@ -129,6 +130,7 @@ func MakeNAVData(scraper INetAssetValue) (data models.FairValueData) {
 	denominator := big.NewFloat(0).SetInt(supply)
 	price := big.NewFloat(0).Quo(numeratorFloat, denominator)
 
+	data.Symbol = scraper.GetConfig().Symbol
 	data.Address = scraper.GetConfig().Address
 	data.Blockchain = scraper.GetConfig().Blockchain
 	data.Numerator = numerator

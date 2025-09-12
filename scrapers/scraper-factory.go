@@ -29,7 +29,7 @@ func NewIScraper(config models.FeedConfig) IScraper {
 				case <-ticker.C:
 					scraper.DataChannel() <- MakeCERData(scraper)
 				case <-scraper.Close():
-					log.Error("Close scraper!")
+					log.Warnf("Close %s scraper!", config.Symbol)
 					return
 				}
 			}
@@ -49,7 +49,7 @@ func NewIScraper(config models.FeedConfig) IScraper {
 				case <-ticker.C:
 					scraper.DataChannel() <- MakeNAVData(scraper)
 				case <-scraper.Close():
-					log.Error("Close scraper!")
+					log.Warnf("Close %s scraper!", config.Symbol)
 					return
 				}
 			}
@@ -68,6 +68,7 @@ func NewIScraper(config models.FeedConfig) IScraper {
 func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 
 	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
+	log.Infof("start %s scraper.", config.Symbol)
 
 	switch asset {
 	// mbTON
@@ -96,16 +97,12 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 
 	// satUSD+
 	case models.Asset{Blockchain: models.BINANCESMARTCHAIN, Address: "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872"}:
-		log.Info("start satUSD+ scraper.")
 		cer := NewSatusdScraper(config)
 		return cer
 
 	// Bunnihub
 	case models.Asset{Blockchain: models.UNICHAIN, Address: "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"}:
-
-		log.Info("start bunnihub scraper.")
 		cer := NewBunnihubScraper(config)
-
 		return cer
 	}
 
@@ -114,17 +111,11 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 
 func NewINetAssetValue(config models.FeedConfig) INetAssetValue {
 	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
+	log.Infof("start %s scraper.", config.Symbol)
 
 	switch asset {
 	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x1db1591540d7a6062be0837ca3c808add28844f6"}:
-		log.Info("start hOHM scraper.")
-
-		// TO DO: How do we deal with same asset/contract but different parameters?
-		// Example: alphagrowth where asset is given by pool id but uni pool manager address is the same:
-		// https://github.com/diadata-org/diadata-monitoring/blob/inspector-v2/experiments/funadmental_price_alphagrowth.py
-		// Answer: use params.
 		nav := NewHohmScraper(config)
-
 		return nav
 	}
 

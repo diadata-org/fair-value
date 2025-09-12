@@ -10,6 +10,7 @@ import (
 const FEED_CONFIG_SEPARATOR = "-"
 
 type FeedConfig struct {
+	Symbol        string `json:"Symbol"`
 	FeedType      string `json:"Feed_Type"`
 	Address       string `json:"Address"`
 	Blockchain    string `json:"Blockchain"`

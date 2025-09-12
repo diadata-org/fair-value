@@ -40,23 +40,16 @@ func main() {
 		configTicker := time.NewTicker(time.Duration(time.Duration(CONFIG_UPDATE_SECONDS) * time.Second))
 
 		for range configTicker.C {
+
 			feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json")
 			if err != nil {
 				log.Error("GetFeedsFromConfig: ", err)
 			}
-			plus, minus := models.GetDiffConfig(feedConfigs, feedConfigsNew)
 
-			// TO DO: Test - remove when done.
-			minus = []models.FeedConfig{{
-				FeedType:   "CONTRACT_EXCHANGE_RATE",
-				Blockchain: models.UNICHAIN,
-				Address:    "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c",
-			},
-			}
-			// TO DO: Test plus as well.
+			plus, minus := models.GetDiffConfig(feedConfigs, feedConfigsNew)
 			log.Warnf("plus -- minus: %v -- %v", plus, minus)
 
-			// Close scrapers of removed configs.
+			// Close scrapers for removed configs.
 			for _, config := range minus {
 				if _, ok := allIscrapers[config.FeedConfigIdentifier()]; ok {
 					allIscrapers[config.FeedConfigIdentifier()].Close() <- true
