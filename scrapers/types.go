@@ -36,6 +36,7 @@ type IScraper interface {
 	Close() chan bool
 }
 
+// TO DO: Better to make an overall data factory and switch inside?
 // func MakeData(feedType string, address string, blockchain string, params []any) FairValueData {
 
 // 	switch feedType {
@@ -84,7 +85,7 @@ func MakeCERData(scraper IContractExchangeRate, address string, blockchain strin
 		log.Error("TotalShares: ", err)
 	}
 
-	// log.Infof("underlying -- totalShares: %s -- %s", underlying.String(), totalShares.String())
+	log.Debugf("underlying -- totalShares for address %s: %s -- %s", address, underlying.String(), totalShares.String())
 
 	numeratorFloat := big.NewFloat(0).SetInt(underlying)
 	denominatorFloat := big.NewFloat(0).SetInt(totalShares)
@@ -96,13 +97,13 @@ func MakeCERData(scraper IContractExchangeRate, address string, blockchain strin
 	data.Denominator = totalShares
 	data.PriceUSD, _ = price.Float64()
 	data.Time = time.Now()
-	// log.Info("price: ", data.PriceUSD)
-	// log.Info("data: ", data)
+	log.Debugf("price for address %s: %v", address, data.PriceUSD)
 
 	return
 }
 
 // TO DO: Is this the best way to produce data?
+// MakeNAVData computes all return values for the INetAssetValue interface.
 func MakeNAVData(scraper INetAssetValue, address string, blockchain string) (data FairValueData) {
 
 	assets, _, err := scraper.Assets()
@@ -118,7 +119,7 @@ func MakeNAVData(scraper INetAssetValue, address string, blockchain string) (dat
 		log.Error("TotalSupply: ", err)
 	}
 
-	// TO DO: Compute (assets-liabilities)/supply
+	// Compute (assets-liabilities)/supply
 	numerator := new(big.Int).Sub(assets, liabilities)
 	numeratorFloat := big.NewFloat(0).SetInt(numerator)
 	denominator := big.NewFloat(0).SetInt(supply)

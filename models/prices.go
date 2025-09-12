@@ -6,6 +6,8 @@ import (
 	"github.com/diadata-org/fair-value/utils"
 )
 
+// TO DO: Update taking into account the new data types.
+
 func ComputeContractExchangeRatePrice(totalUnderlying *big.Int, totalShares *big.Int) (price float64, err error) {
 	return utils.DivideBigInts(totalUnderlying, totalShares)
 }
