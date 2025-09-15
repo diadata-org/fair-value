@@ -68,7 +68,7 @@ func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err e
 		if err != nil {
 			log.Fatalf("failed to fetch price for %s: %v", token.Hex(), err)
 		}
-		// log.Infof("assets supply -- price: %s -- %v", supply.String(), price)
+		log.Debugf("assets supply -- price: %s -- %v", supply.String(), price)
 
 		// Scale price and supply to big.Float.
 		priceBig := big.NewFloat(0).Mul(big.NewFloat(price), new(big.Float).SetFloat64(math.Pow10(int(DECIMALS))))
@@ -149,7 +149,6 @@ func (scraper *HohmScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
 }
 
-// TO DO
 func (scraper *HohmScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
 }

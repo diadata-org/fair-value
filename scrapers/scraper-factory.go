@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"context"
 	"time"
 
 	"github.com/diadata-org/fair-value/models"
@@ -14,7 +15,7 @@ import (
 
 // NewIScraper is the factory function for the basic Scraper interface.
 // @params is a set of optional parameters such as poolID for bunnihub UniV4 pools.
-func NewIScraper(config models.FeedConfig) IScraper {
+func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
 	switch config.FeedType {
 
 	case "CONTRACT_EXCHANGE_RATE":
@@ -30,6 +31,7 @@ func NewIScraper(config models.FeedConfig) IScraper {
 					scraper.DataChannel() <- MakeCERData(scraper)
 				case <-scraper.Close():
 					log.Warnf("Close %s scraper!", config.Symbol)
+					cancel()
 					return
 				}
 			}
@@ -50,6 +52,7 @@ func NewIScraper(config models.FeedConfig) IScraper {
 					scraper.DataChannel() <- MakeNAVData(scraper)
 				case <-scraper.Close():
 					log.Warnf("Close %s scraper!", config.Symbol)
+					cancel()
 					return
 				}
 			}

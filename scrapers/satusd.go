@@ -91,7 +91,6 @@ func (scraper *SatusdScraper) GetConfig() models.FeedConfig {
 	return scraper.config
 }
 
-// TO DO
 func (scraper *SatusdScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
 }

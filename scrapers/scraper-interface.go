@@ -17,24 +17,23 @@ const (
 
 type IScraper interface {
 	DataChannel() chan models.FairValueData
-	// TO DO: Should we make this Close() error and implement Close() on scraper level as closeChannel <- true?
 	Close() chan bool
 	GetConfig() models.FeedConfig
 }
 
-// TO DO: Better to make an overall data factory and switch inside?
-// func MakeData(feedType string, address string, blockchain string, params []any) FairValueData {
+// // TO DO: Better to make an overall data factory and switch inside?
+// func MakeDataMain(config models.FeedConfig) models.FairValueData {
 
-// 	switch feedType {
+// 	switch config.FeedType {
 // 	case "CONTRACT_EXCHANGE_RATE":
-// 		scraper := NewIContractExchangeRate(blockchain, address, params)
-// 		return MakeCERData(scraper, address, blockchain)
+// 		scraper := NewIContractExchangeRate(config)
+// 		return MakeCERData(scraper)
 
 // 	case "NET_ASSET_VALUE":
-// 		scraper := NewINetAssetValue(blockchain, address, params)
-// 		return MakeNAVData(scraper, address, blockchain)
+// 		scraper := NewINetAssetValue(config)
+// 		return MakeNAVData(scraper)
 // 	}
-// 	return FairValueData{}
+// 	return models.FairValueData{}
 // }
 
 type IContractExchangeRate interface {

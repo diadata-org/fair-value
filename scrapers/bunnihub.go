@@ -117,7 +117,6 @@ func (scraper *BunnihubScraper) GetConfig() models.FeedConfig {
 	return scraper.config
 }
 
-// TO DO
 func (scraper *BunnihubScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
 }

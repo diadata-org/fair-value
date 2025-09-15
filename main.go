@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -13,7 +14,9 @@ const (
 	CONFIG_UPDATE_SECONDS = 60
 )
 
-var feedConfigs, feedConfigsNew []models.FeedConfig
+var (
+	feedConfigs, feedConfigsNew []models.FeedConfig
+)
 
 func main() {
 
@@ -28,9 +31,10 @@ func main() {
 
 	allIscrapers := make(map[string]scrapers.IScraper)
 	for _, config := range feedConfigs {
-		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config)
+		ctx, cancel := context.WithCancel(context.Background())
+		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config)
 		wg.Add(1)
-		go handleData(allIscrapers[config.FeedConfigIdentifier()].DataChannel(), &wg)
+		go handleData(ctx, allIscrapers[config.FeedConfigIdentifier()], &wg)
 	}
 
 	// Routine that periodically fetches the configs and compares to deployed config.
@@ -47,7 +51,24 @@ func main() {
 			}
 
 			plus, minus := models.GetDiffConfig(feedConfigs, feedConfigsNew)
-			log.Warnf("plus -- minus: %v -- %v", plus, minus)
+			log.Info("REMOVING the following feeds...")
+			for _, m := range minus {
+				log.Infof("Symbol -- Address: %s -- %s", m.Symbol, m.Address)
+			}
+			log.Info("ADDING the following feeds...")
+			for _, m := range plus {
+				log.Infof("Symbol -- Address: %s -- %s", m.Symbol, m.Address)
+			}
+
+			// TEST removing a feed
+			minus = []models.FeedConfig{
+				{
+					Symbol:     "satUSD+",
+					FeedType:   "CONTRACT_EXCHANGE_RATE",
+					Address:    "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872",
+					Blockchain: "BinanceSmartChain",
+				},
+			}
 
 			// Close scrapers for removed configs.
 			for _, config := range minus {
@@ -59,9 +80,10 @@ func main() {
 
 			// Add scraper for added configs.
 			for _, config := range plus {
-				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(config)
+				ctx, cancel := context.WithCancel(context.Background())
+				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config)
 				wg.Add(1)
-				go handleData(allIscrapers[config.FeedConfigIdentifier()].DataChannel(), &wg)
+				go handleData(ctx, allIscrapers[config.FeedConfigIdentifier()], &wg)
 			}
 		}
 	}()
@@ -69,13 +91,18 @@ func main() {
 }
 
 // TO DO: Add onchain functionality.
-// Handles data from dataChannel.
-func handleData(dataChannel chan models.FairValueData, wg *sync.WaitGroup) {
+// handleData handles data from dataChannel.
+func handleData(ctx context.Context, scraper scrapers.IScraper, wg *sync.WaitGroup) {
 	defer wg.Done()
-	// TO DO: make select statement with graceful close.
-	for d := range dataChannel {
-		log.Info("channel out: ", d)
-		// This should be the final line of main (blocking call)
-		// onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, chainID, filtersChannel)
+	for {
+		select {
+		case d := <-scraper.DataChannel():
+			log.Info("channel out: ", d)
+			// This should be the final line of main (blocking call)
+			// onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, chainID, filtersChannel)
+		case <-ctx.Done():
+			log.Warn("close data handler for scraper ", scraper.GetConfig().Symbol)
+			return
+		}
 	}
 }
