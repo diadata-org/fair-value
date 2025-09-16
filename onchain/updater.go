@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"time"
 
-	diaOracleV2MultiupdateService "github.com/diadata-org/diadata/pkg/dia/scraper/blockchain-scrapers/blockchains/ethereum/diaOracleV2MultiupdateService"
+	ValueStore "github.com/diadata-org/fair-value/contracts/valuestore"
 	"github.com/diadata-org/fair-value/models"
 	"github.com/diadata-org/fair-value/utils"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -33,36 +33,41 @@ func init() {
 
 func OracleUpdateExecutor(
 	auth *bind.TransactOpts,
-	contract *diaOracleV2MultiupdateService.DiaOracleV2MultiupdateService,
-	contractBackup *diaOracleV2MultiupdateService.DiaOracleV2MultiupdateService,
+	contract *ValueStore.ValueStore,
+	contractBackup *ValueStore.ValueStore,
 	conn *ethclient.Client,
 	connBackup *ethclient.Client,
-	chainId int64,
-	dataChannel <-chan []models.FairValueData,
+	data []models.FairValueData,
 ) {
 
-	for dataPoints := range dataChannel {
+	for _, d := range data {
 		timestamp := time.Now().Unix()
 		var keys []string
-		var values []int64
-		for _, data := range dataPoints {
-			log.Infof(
-				"updater - filterPoint received at %v: %v -- %v -- %v.",
-				time.Unix(timestamp, 0),
-				data.Symbol,
-				data.PriceUSD,
-				data.Time,
-			)
+		var fairValues, valueUsds, numerators, denominators []*big.Int
+		var timestamps []int64
 
-			// TO DO: Make a proper key.
-			key := data.Symbol
-			keys = append(keys, key)
-			values = append(values, int64(data.PriceUSD*math.Pow10(int(DECIMALS_ORACLE_VALUE))))
-		}
-		err := updateOracleMultiValues(conn, contract, auth, keys, values, timestamp)
+		log.Infof(
+			"updater - data received at %v: %v -- %v -- %v.",
+			time.Unix(timestamp, 0),
+			d.Symbol,
+			d.PriceUSD,
+			d.Time,
+		)
+
+		// TO DO: Make a proper key.
+		key := d.Symbol
+		keys = append(keys, key)
+		fairValues = append(fairValues, big.NewInt(int64(d.FairValueNative*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))
+		valueUsds = append(valueUsds, big.NewInt(int64(d.PriceUSD*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))
+		numerators = append(numerators, d.Numerator)
+		denominators = append(denominators, d.Denominator)
+
+		timestamps = append(timestamps, d.Time.Unix())
+
+		err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
 		if err != nil {
 			log.Warnf("updater - Failed to update Oracle: %v. Retry with backup node.", err)
-			err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, values, timestamp)
+			err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
 			if err != nil {
 				log.Errorf("backup updater - Failed to update Oracle: %v.", err)
 				return
@@ -71,20 +76,20 @@ func OracleUpdateExecutor(
 	}
 }
 
+// TO DO: Either remove timestamps or rewrite contract such that every entry has its own timestamp.
 func updateOracleMultiValues(
 	client *ethclient.Client,
-	contract *diaOracleV2MultiupdateService.DiaOracleV2MultiupdateService,
+	contract *ValueStore.ValueStore,
 	auth *bind.TransactOpts,
 	keys []string,
-	values []int64,
-	timestamp int64) error {
-
-	var cValues []*big.Int
-	var gasPrice *big.Int
-	var err error
+	fairValues []*big.Int,
+	valueUsds []*big.Int,
+	numerators []*big.Int,
+	denominators []*big.Int,
+	timestamps []int64) error {
 
 	// Get gas price suggestion
-	gasPrice, err = client.SuggestGasPrice(context.Background())
+	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
 		log.Errorf("updater - SuggestGasPrice: %v.", err)
 		return err
@@ -94,20 +99,19 @@ func updateOracleMultiValues(
 	fGas.Mul(fGas, big.NewFloat(1.1))
 	gasPrice, _ = fGas.Int(nil)
 
-	for _, value := range values {
-		// Create compressed argument with values/timestamps
-		cValue := big.NewInt(value)
-		cValue = cValue.Lsh(cValue, 128)
-		cValue = cValue.Add(cValue, big.NewInt(timestamp))
-		cValues = append(cValues, cValue)
-	}
-
 	// Write values to smart contract
-	tx, err := contract.SetMultipleValues(&bind.TransactOpts{
-		From:     auth.From,
-		Signer:   auth.Signer,
-		GasPrice: gasPrice,
-	}, keys, cValues)
+	tx, err := contract.SetMultipleValues(
+		&bind.TransactOpts{
+			From:     auth.From,
+			Signer:   auth.Signer,
+			GasPrice: gasPrice,
+		},
+		keys,
+		fairValues,
+		valueUsds,
+		numerators,
+		denominators,
+	)
 	if err != nil {
 		return err
 	}
