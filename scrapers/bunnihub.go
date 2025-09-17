@@ -19,7 +19,6 @@ import (
 // ------------------------------------------------------------------
 
 const (
-	RPC_NODE = "https://unichain-rpc.publicnode.com"
 	// UniswapV4 pool manager.
 	UNISWAPV4_POOL_MANAGER = "0x000000000049C7bcBCa294E63567b4D21EB765f1"
 	// POOL_ID = "0x5e5bc151fdb581faf0c28ae30ceba9193da793ccd7c22a70d3feaf3408c07666"
@@ -51,9 +50,9 @@ func NewBunnihubScraper(config models.FeedConfig) *BunnihubScraper {
 
 	scraper.lpTokenAddress = common.HexToAddress(config.Address)
 
-	client, err := ethclient.Dial(RPC_NODE)
+	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_BUNNIHUB", ""))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 

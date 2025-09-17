@@ -18,14 +18,25 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	CONFIG_UPDATE_SECONDS = 60
-	WRITE_TICKER_SECONDS  = 30
-)
-
 var (
+	configUpdateSeconds         int
+	writeTickerSeconds          int
 	feedConfigs, feedConfigsNew []models.FeedConfig
 )
+
+func init() {
+	var err error
+	configUpdateSeconds, err = strconv.Atoi(utils.Getenv("CONFIG_UPDATE_SECONDS", "86400"))
+	if err != nil {
+		log.Errorf("parse CONFIG_UPDATE_SECONDS: %v", err)
+		configUpdateSeconds = 86400
+	}
+	writeTickerSeconds, err = strconv.Atoi(utils.Getenv("WRITE_TICKER_SECONDS", "30"))
+	if err != nil {
+		log.Errorf("parse WRITE_TICKER_SECONDS: %v", err)
+		configUpdateSeconds = 30
+	}
+}
 
 func main() {
 
@@ -90,7 +101,7 @@ func main() {
 	// Whenever something is added to or removed from the config, either deploy or close it.
 	// For now, assume that configs are either added or removed, i.e. existing ones cannot be changed.
 	go func() {
-		configTicker := time.NewTicker(time.Duration(time.Duration(CONFIG_UPDATE_SECONDS) * time.Second))
+		configTicker := time.NewTicker(time.Duration(time.Duration(configUpdateSeconds) * time.Second))
 
 		for range configTicker.C {
 
@@ -140,7 +151,7 @@ func main() {
 	// Routine writing collected data to the oracle.
 	var collectedData []models.FairValueData
 	go func() {
-		writeTicker := time.NewTicker(time.Duration(WRITE_TICKER_SECONDS) * time.Second)
+		writeTicker := time.NewTicker(time.Duration(writeTickerSeconds) * time.Second)
 		for range writeTicker.C {
 			log.Info("collectedData:----------------------------------- ", collectedData)
 			onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, collectedData)

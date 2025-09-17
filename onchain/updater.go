@@ -54,7 +54,6 @@ func OracleUpdateExecutor(
 			d.Time,
 		)
 
-		// TO DO: Make a proper key.
 		key := d.Symbol
 		keys = append(keys, key)
 		fairValues = append(fairValues, big.NewInt(int64(d.FairValueNative*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))

@@ -43,7 +43,7 @@ func NewSatusdScraper(config models.FeedConfig) *SatusdScraper {
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SATUSD", ""))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 

@@ -54,9 +54,10 @@ func GetDiffConfig(fcOld, fcNew []FeedConfig) (plus []FeedConfig, minus []FeedCo
 }
 
 func GetFeedsFromConfig(filename string) ([]FeedConfig, error) {
+
 	data, err := utils.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return []FeedConfig{}, err
 	}
 
 	type feedConfigs struct {
@@ -65,7 +66,8 @@ func GetFeedsFromConfig(filename string) ([]FeedConfig, error) {
 	var fc feedConfigs
 	err = json.Unmarshal(data, &fc)
 	if err != nil {
-		return nil, err
+		return []FeedConfig{}, err
 	}
 	return fc.Feeds, nil
+
 }

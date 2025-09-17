@@ -31,10 +31,10 @@ type HohmScraper struct {
 }
 
 func NewHohmScraper(config models.FeedConfig) *HohmScraper {
-	rpcNode := "https://eth.drpc.org"
-	client, err := ethclient.Dial(rpcNode)
+
+	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_HOHM", ""))
 	if err != nil {
-		log.Fatalf("failed to connect to Ethereum RPC: %v", err)
+		log.Fatalf("make eth client for %s: %v", config.Symbol, err)
 	}
 	hohmCaller, err := hohm.NewHohmCaller(common.HexToAddress(config.Address), client)
 	if err != nil {
