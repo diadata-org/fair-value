@@ -40,11 +40,12 @@ func OracleUpdateExecutor(
 	data []models.FairValueData,
 ) {
 
+	var keys []string
+	var fairValues, valueUsds, numerators, denominators []*big.Int
+	var timestamps []int64
+
 	for _, d := range data {
 		timestamp := time.Now().Unix()
-		var keys []string
-		var fairValues, valueUsds, numerators, denominators []*big.Int
-		var timestamps []int64
 
 		log.Infof(
 			"updater - data received at %v: %v -- %v -- %v.",
@@ -62,15 +63,14 @@ func OracleUpdateExecutor(
 		denominators = append(denominators, d.Denominator)
 
 		timestamps = append(timestamps, d.Time.Unix())
-
-		err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
+	}
+	err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
+	if err != nil {
+		log.Warnf("updater - Failed to update Oracle: %v. Retry with backup node.", err)
+		err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
 		if err != nil {
-			log.Warnf("updater - Failed to update Oracle: %v. Retry with backup node.", err)
-			err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
-			if err != nil {
-				log.Errorf("backup updater - Failed to update Oracle: %v.", err)
-				return
-			}
+			log.Errorf("backup updater - Failed to update Oracle: %v.", err)
+			return
 		}
 	}
 }
