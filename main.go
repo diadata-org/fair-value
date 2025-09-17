@@ -31,10 +31,10 @@ func init() {
 		log.Errorf("parse CONFIG_UPDATE_SECONDS: %v", err)
 		configUpdateSeconds = 86400
 	}
-	writeTickerSeconds, err = strconv.Atoi(utils.Getenv("WRITE_TICKER_SECONDS", "30"))
+	writeTickerSeconds, err = strconv.Atoi(utils.Getenv("WRITE_TICKER_SECONDS", "120"))
 	if err != nil {
 		log.Errorf("parse WRITE_TICKER_SECONDS: %v", err)
-		configUpdateSeconds = 30
+		configUpdateSeconds = 120
 	}
 }
 
@@ -139,18 +139,19 @@ func main() {
 	}()
 
 	// Routine writing collected data to the oracle.
-	var collectedData []models.FairValueData
+	collectedData := make(map[string]models.FairValueData)
 	go func() {
 		writeTicker := time.NewTicker(time.Duration(writeTickerSeconds) * time.Second)
 		for range writeTicker.C {
 			log.Info("collectedData:----------------------------------- ", collectedData)
 			onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, collectedData)
-			collectedData = []models.FairValueData{}
 		}
 	}()
+
 	go func() {
 		for d := range collectorChannel {
-			collectedData = append(collectedData, d)
+			// Only store the latest data point.
+			collectedData[d.FairValueDataIdentifier()] = d
 		}
 	}()
 

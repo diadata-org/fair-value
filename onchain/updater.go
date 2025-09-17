@@ -37,7 +37,7 @@ func OracleUpdateExecutor(
 	contractBackup *ValueStore.ValueStore,
 	conn *ethclient.Client,
 	connBackup *ethclient.Client,
-	data []models.FairValueData,
+	data map[string]models.FairValueData,
 ) {
 
 	var keys []string

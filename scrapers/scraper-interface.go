@@ -96,6 +96,7 @@ func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
 	data.Symbol = config.Symbol
 	data.Address = config.Address
 	data.Blockchain = config.Blockchain
+	data.FeedType = config.FeedType
 	data.Numerator = underlying
 	data.Denominator = totalShares
 	if underlying == nil {
@@ -142,6 +143,7 @@ func MakeNAVData(scraper INetAssetValue) (data models.FairValueData) {
 	data.Symbol = config.Symbol
 	data.Address = config.Address
 	data.Blockchain = config.Blockchain
+	data.FeedType = config.FeedType
 	data.Numerator = numerator
 	data.Denominator = supply
 	if numerator == nil {
