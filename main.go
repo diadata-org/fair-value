@@ -120,16 +120,6 @@ func main() {
 				log.Infof("Symbol -- Address: %s -- %s", m.Symbol, m.Address)
 			}
 
-			// TEST removing a feed
-			minus = []models.FeedConfig{
-				{
-					Symbol:     "satUSD+",
-					FeedType:   "CONTRACT_EXCHANGE_RATE",
-					Address:    "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872",
-					Blockchain: "BinanceSmartChain",
-				},
-			}
-
 			// Close scrapers for removed configs.
 			for _, config := range minus {
 				if _, ok := allIscrapers[config.FeedConfigIdentifier()]; ok {

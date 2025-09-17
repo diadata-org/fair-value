@@ -41,7 +41,6 @@ func readFromRemote(filename string) (data []byte, err error) {
 	url := "https://api.github.com/repos/diadata-org/fair-value/contents/config/" + filename
 
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("Authorization", "token "+os.Getenv("GITHUB_TOKEN"))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
