@@ -98,6 +98,12 @@ func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
 	data.Blockchain = config.Blockchain
 	data.Numerator = underlying
 	data.Denominator = totalShares
+	if underlying == nil {
+		data.Numerator = big.NewInt(0)
+	}
+	if totalShares == nil {
+		data.Denominator = big.NewInt(0)
+	}
 	data.PriceUSD = priceUSD
 	data.FairValueNative = fairValueNative
 	data.Time = time.Now()
@@ -109,18 +115,22 @@ func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
 // TO DO: Is this the best way to produce data?
 // MakeNAVData computes all return values for the INetAssetValue interface.
 func MakeNAVData(scraper INetAssetValue) (data models.FairValueData) {
+	config := scraper.GetConfig()
 
 	assets, _, err := scraper.Assets()
 	if err != nil {
-		log.Error("scraper.Assets(): ", err)
+		log.Errorf("scraper.Assets() for %s: %v", config.Symbol, err)
+		return
 	}
 	liabilities, _, err := scraper.Liabilities()
 	if err != nil {
-		log.Error("scraper.Liabilities(): ", err)
+		log.Errorf("scraper.Liabilities() for %s: %v", config.Symbol, err)
+		return
 	}
 	supply, err := scraper.TotalSupply()
 	if err != nil {
-		log.Error("TotalSupply: ", err)
+		log.Errorf("TotalSupply for %s: %v", config.Symbol, err)
+		return
 	}
 
 	// Compute (assets-liabilities)/supply
@@ -129,11 +139,17 @@ func MakeNAVData(scraper INetAssetValue) (data models.FairValueData) {
 	denominator := big.NewFloat(0).SetInt(supply)
 	price := big.NewFloat(0).Quo(numeratorFloat, denominator)
 
-	data.Symbol = scraper.GetConfig().Symbol
-	data.Address = scraper.GetConfig().Address
-	data.Blockchain = scraper.GetConfig().Blockchain
+	data.Symbol = config.Symbol
+	data.Address = config.Address
+	data.Blockchain = config.Blockchain
 	data.Numerator = numerator
 	data.Denominator = supply
+	if numerator == nil {
+		data.Numerator = big.NewInt(0)
+	}
+	if supply == nil {
+		data.Denominator = big.NewInt(0)
+	}
 	data.PriceUSD, _ = price.Float64()
 	data.Time = time.Now()
 
