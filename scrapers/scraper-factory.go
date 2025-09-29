@@ -16,6 +16,7 @@ import (
 // NewIScraper is the factory function for the basic Scraper interface.
 // @params is a set of optional parameters such as poolID for bunnihub UniV4 pools.
 func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
+
 	switch config.FeedType {
 
 	case "CONTRACT_EXCHANGE_RATE":
@@ -74,28 +75,14 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 	log.Infof("start %s scraper.", config.Symbol)
 
 	switch asset {
+	// USDp
+	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x6efeDDF9269c3683Ba516cb0e2124FE335F262a2"}:
+		cer := NewUSDPScraperScraper(config)
+		return cer
+
 	// mbTON
-	case models.Asset{Blockchain: "TON", Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY"}:
-
-		log.Info("start mbTON scraper.")
+	case models.Asset{Blockchain: models.TONCHAIN, Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY"}:
 		cer := NewBMTonScraper(config)
-
-		totalUnderlying, _, err := cer.TotalUnderlying()
-		if err != nil {
-			log.Fatal("totalUnderlying: ", err)
-		}
-		totalShares, err := cer.TotalShares()
-		if err != nil {
-			log.Fatal("totalShares: ", err)
-		}
-		log.Infof("totalUnderlying -- totalShares: %s -- %s", totalUnderlying.String(), totalShares.String())
-		price, err := models.ComputeContractExchangeRatePrice(totalUnderlying, totalShares)
-		if err != nil {
-			log.Error("ComputeContractExchangeRatePrice: ", err)
-		}
-		fairValueData := models.FairValueData{Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY", Blockchain: "TON", FairValueNative: price, Time: time.Now()}
-		cer.DataChannel() <- fairValueData
-
 		return cer
 
 	// satUSD+
