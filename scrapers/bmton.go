@@ -11,8 +11,6 @@ import (
 	"github.com/xssnick/tonutils-go/ton"
 )
 
-// ----------------------------- ON HOLD ----------------------------
-
 // ------------------------------------------------------------------
 // CONTRACT EXCHANGE RATE
 // ------------------------------------------------------------------
@@ -36,7 +34,7 @@ func NewBMTonScraper(config models.FeedConfig) *BMTonScraper {
 }
 
 func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, totalTonValue *big.Int, err error) {
-	result, err := getBmtonExecutionResult()
+	result, err := scraper.getBmtonExecutionResult()
 	if err != nil {
 		return
 	}
@@ -45,7 +43,7 @@ func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, totalTonValue
 }
 
 func (scraper *BMTonScraper) TotalShares() (totalBmton *big.Int, err error) {
-	result, err := getBmtonExecutionResult()
+	result, err := scraper.getBmtonExecutionResult()
 	if err != nil {
 		return
 	}
@@ -57,7 +55,6 @@ func (scraper *BMTonScraper) DataChannel() chan models.FairValueData {
 	return scraper.dataChannel
 }
 
-// TO DO
 func (scraper *BMTonScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
 }
@@ -66,7 +63,7 @@ func (scraper *BMTonScraper) GetConfig() models.FeedConfig {
 	return scraper.config
 }
 
-func getBmtonExecutionResult() (result *ton.ExecutionResult, err error) {
+func (scraper *BMTonScraper) getBmtonExecutionResult() (result *ton.ExecutionResult, err error) {
 
 	// Connect to TON mainnet
 	client := liteclient.NewConnectionPool()
@@ -78,7 +75,7 @@ func getBmtonExecutionResult() (result *ton.ExecutionResult, err error) {
 	api := ton.NewAPIClient(client)
 
 	// Resolve contract address
-	contractAddr := address.MustParseAddr(BM_TON_ADDRESS)
+	contractAddr := address.MustParseAddr(scraper.config.Address)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
