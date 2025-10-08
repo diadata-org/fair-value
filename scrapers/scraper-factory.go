@@ -29,7 +29,11 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
 			for {
 				select {
 				case <-ticker.C:
-					scraper.DataChannel() <- MakeCERData(scraper)
+					if data, err := MakeCERData(scraper); err == nil {
+						scraper.DataChannel() <- data
+					} else {
+						log.Errorf("MakeCERData for %s: %v", config.Symbol, err)
+					}
 				case <-scraper.Close():
 					log.Warnf("Close %s scraper!", config.Symbol)
 					cancel()
@@ -50,7 +54,11 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
 			for {
 				select {
 				case <-ticker.C:
-					scraper.DataChannel() <- MakeNAVData(scraper)
+					if data, err := MakeNAVData(scraper); err == nil {
+						scraper.DataChannel() <- data
+					} else {
+						log.Errorf("MakeNAVData for %s: %v", config.Symbol, err)
+					}
 				case <-scraper.Close():
 					log.Warnf("Close %s scraper!", config.Symbol)
 					cancel()
@@ -80,7 +88,7 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 		cer := NewUSDPScraperScraper(config)
 		return cer
 
-	// mbTON
+	// bmTON
 	case models.Asset{Blockchain: models.TONCHAIN, Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY"}:
 		cer := NewBMTonScraper(config)
 		return cer

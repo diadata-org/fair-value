@@ -62,16 +62,16 @@ type INetAssetValue interface {
 }
 
 // MAKECERData computes all return values for the IContractExchangeRate interface.
-func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
+func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData, err error) {
 
 	underlying, underlyingValue, err := scraper.TotalUnderlying()
 	if err != nil {
-		log.Error("TotalUnderlying: ", err)
+		return
 	}
 
 	totalShares, err := scraper.TotalShares()
 	if err != nil {
-		log.Error("TotalShares: ", err)
+		return
 	}
 
 	config := scraper.GetConfig()
@@ -115,22 +115,22 @@ func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData) {
 
 // TO DO: Is this the best way to produce data?
 // MakeNAVData computes all return values for the INetAssetValue interface.
-func MakeNAVData(scraper INetAssetValue) (data models.FairValueData) {
+func MakeNAVData(scraper INetAssetValue) (data models.FairValueData, err error) {
 	config := scraper.GetConfig()
 
 	assets, _, err := scraper.Assets()
 	if err != nil {
-		log.Errorf("scraper.Assets() for %s: %v", config.Symbol, err)
+		log.Debugf("scraper.Assets() for %s: %v", config.Symbol, err)
 		return
 	}
 	liabilities, _, err := scraper.Liabilities()
 	if err != nil {
-		log.Errorf("scraper.Liabilities() for %s: %v", config.Symbol, err)
+		log.Debugf("scraper.Liabilities() for %s: %v", config.Symbol, err)
 		return
 	}
 	supply, err := scraper.TotalSupply()
 	if err != nil {
-		log.Errorf("TotalSupply for %s: %v", config.Symbol, err)
+		log.Debugf("TotalSupply for %s: %v", config.Symbol, err)
 		return
 	}
 
