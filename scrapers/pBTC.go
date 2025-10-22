@@ -79,15 +79,17 @@ func (scraper *pBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 	var totalBalance float64
 
 	// Compute balances of reserve wallets from config.
-	for _, wallet := range scraper.config.Params[1].([]any) {
-		var balance float64
-		balance, err = scraper.getBitcoinWalletBalance(wallet.(string))
-		if err != nil {
-			log.Errorf("pBTC -- getBitcoinWalletBalance for address %s: %v", wallet, err)
-			return
+	if len(scraper.config.Params) > 0 {
+		for _, wallet := range scraper.config.Params[0].([]any) {
+			var balance float64
+			balance, err = scraper.getBitcoinWalletBalance(wallet.(string))
+			if err != nil {
+				log.Errorf("pBTC -- getBitcoinWalletBalance for address %s: %v", wallet, err)
+				return
+			}
+			log.Debugf("pBTC -- balance for %s: %v", wallet, balance)
+			totalBalance += balance
 		}
-		log.Debugf("pBTC -- balance for %s: %v", wallet, balance)
-		totalBalance += balance
 	}
 	log.Debugf("pBTC -- total balance for config wallets: %v", totalBalance)
 
