@@ -1,6 +1,14 @@
 {
     "Feeds": [
         {
+            "Symbol": "pBTC",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359",
+            "Blockchain": "Ethereum-Holesky",
+            "Update_Seconds": 20,
+            "Params": []
+        },
+        {
             "Symbol": "USDp",
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
             "Address": "0x6efeDDF9269c3683Ba516cb0e2124FE335F262a2",

@@ -43,7 +43,8 @@ func NewSatusdScraper(config models.FeedConfig) *SatusdScraper {
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SATUSD", ""))
 	if err != nil {
-		log.Fatalf("make eth client for %s: %v", config.Symbol, err)
+		log.Errorf("satUSD+ -- make eth client for %s: %v", config.Symbol, err)
+		return nil
 	}
 	scraper.client = client
 
@@ -66,11 +67,11 @@ func (scraper *SatusdScraper) TotalUnderlying() (totalUnderlying *big.Int, total
 	// DIA Prices
 	satusdPrice, err := utils.GetDiaQuotationPrice(models.BINANCESMARTCHAIN, "0xb4818BB69478730EF4e33Cc068dD94278e2766cB")
 	if err != nil {
-		log.Fatal(err)
+		log.Error("satUSD+ -- GetDiaQuotationPrice: ", err)
 	}
 	// Scaled sum of values.
 	totalValueUnderlying, _ = new(big.Float).Mul(big.NewFloat(0).SetInt(totalUnderlying), big.NewFloat(satusdPrice)).Int(nil)
-	log.Debug("satUSD total value underlying: ", totalValueUnderlying)
+	log.Debug("satUSD+ total value underlying: ", totalValueUnderlying)
 
 	return
 }

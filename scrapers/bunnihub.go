@@ -52,7 +52,7 @@ func NewBunnihubScraper(config models.FeedConfig) *BunnihubScraper {
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_BUNNIHUB", ""))
 	if err != nil {
-		log.Fatalf("make eth client for %s: %v", config.Symbol, err)
+		log.Errorf("bunnihub -- make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 
@@ -76,18 +76,20 @@ func (scraper *BunnihubScraper) TotalUnderlying() (totalUnderlying *big.Int, tot
 	// TO DO: call vault assets from contract as follows.
 	// poolState, err := bunnihubCaller.PoolState(&bind.CallOpts{}, poolID)
 	// if err != nil {
-	// 	log.Fatal("PoolState: ", err)
+	// 	log.Error("bunnihub -- PoolState: ", err)
 	// }
 	// poolState.Vault0 and poolState.Vault1 -> call "asset" on the respective vault.
 
 	// DIA Prices
 	ethPrice, err := utils.GetDiaQuotationPrice(models.ETHEREUM, "0x0000000000000000000000000000000000000000")
 	if err != nil {
-		log.Fatal(err)
+		log.Error("bunnihub -- GetDiaQuotationPrice for ETH: ", err)
+		return
 	}
 	usdcPrice, err := utils.GetDiaQuotationPrice(models.ETHEREUM, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 	if err != nil {
-		log.Fatal(err)
+		log.Error("bunnihub -- GetDiaQuotationPrice for USDC: ", err)
+		return
 	}
 
 	// Scaled sum of values.

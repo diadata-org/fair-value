@@ -13,3 +13,10 @@ func DivideBigInts(numerator *big.Int, denominator *big.Int) (result float64, er
 	result, _ = new(big.Float).Quo(big.NewFloat(0).SetInt(numerator), big.NewFloat(0).SetInt(denominator)).Float64()
 	return
 }
+
+func Min(n, m uint64) uint64 {
+	if n <= m {
+		return n
+	}
+	return m
+}

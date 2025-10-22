@@ -34,11 +34,13 @@ func NewHohmScraper(config models.FeedConfig) *HohmScraper {
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_HOHM", ""))
 	if err != nil {
-		log.Fatalf("make eth client for %s: %v", config.Symbol, err)
+		log.Errorf("hOHM -- make eth client for %s: %v", config.Symbol, err)
+		return nil
 	}
 	hohmCaller, err := hohm.NewHohmCaller(common.HexToAddress(config.Address), client)
 	if err != nil {
-		log.Fatalf("NewHohmCaller: %v", err)
+		log.Errorf("hOHM -- NewHohmCaller: %v", err)
+		return nil
 	}
 
 	scraper := HohmScraper{
@@ -61,14 +63,16 @@ func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err e
 
 	assetValueUSD = new(big.Int)
 	for i, token := range tokens.Assets {
-		// log.Infof("asset address: %s", token.Hex())
+		// log.Infof("hOHM -- asset address: %s", token.Hex())
 		supply := balances.TotalAssets[i]
 		// TO DO: Get price from lumina metacontract.
-		price, err := utils.GetDiaQuotationPrice("Ethereum", token.Hex())
+		var price float64
+		price, err = utils.GetDiaQuotationPrice("Ethereum", token.Hex())
 		if err != nil {
-			log.Fatalf("failed to fetch price for %s: %v", token.Hex(), err)
+			log.Errorf("hOHM -- failed to fetch price for %s: %v", token.Hex(), err)
+			return
 		}
-		log.Debugf("assets supply -- price: %s -- %v", supply.String(), price)
+		log.Debugf("hOHM -- assets supply -- price: %s -- %v", supply.String(), price)
 
 		// Scale price and supply to big.Float.
 		priceBig := big.NewFloat(0).Mul(big.NewFloat(price), new(big.Float).SetFloat64(math.Pow10(int(DECIMALS))))
@@ -77,7 +81,7 @@ func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err e
 		// Decimals of token.
 		decimals, err := utils.GetEthDecimals(token, scraper.client)
 		if err != nil {
-			log.Errorf("GetEthDecimals for %s: %v", token.Hex(), err)
+			log.Errorf("hOHM -- GetEthDecimals for %s: %v", token.Hex(), err)
 			continue
 		}
 
@@ -99,14 +103,16 @@ func (scraper *HohmScraper) Liabilities() (liabilitiesValueUSD *big.Int, native 
 
 	liabilitiesValueUSD = new(big.Int)
 	for i, token := range tokens.Liabilities {
-		// log.Infof("liability address: %s", token.Hex())
+		// log.Infof("hOHM -- liability address: %s", token.Hex())
 		supply := balances.TotalLiabilities[i]
 		// TO DO: Get price from lumina metacontract.
-		price, err := utils.GetDiaQuotationPrice("Ethereum", token.Hex())
+		var price float64
+		price, err = utils.GetDiaQuotationPrice("Ethereum", token.Hex())
 		if err != nil {
-			log.Fatalf("failed to fetch price for %s: %v", token.Hex(), err)
+			log.Errorf("hOHM -- failed to fetch price for %s: %v", token.Hex(), err)
+			return
 		}
-		// log.Infof("assets supply -- price: %s -- %v", supply.String(), price)
+		// log.Infof("hOHM -- assets supply -- price: %s -- %v", supply.String(), price)
 
 		// Scale price and supply to big.Float.
 		priceBig := big.NewFloat(0).Mul(big.NewFloat(price), new(big.Float).SetFloat64(math.Pow10(int(DECIMALS))))
@@ -115,7 +121,7 @@ func (scraper *HohmScraper) Liabilities() (liabilitiesValueUSD *big.Int, native 
 		// Decimals of token.
 		decimals, err := utils.GetEthDecimals(token, scraper.client)
 		if err != nil {
-			log.Errorf("GetEthDecimals for %s: %v", token.Hex(), err)
+			log.Errorf("hOHM -- GetEthDecimals for %s: %v", token.Hex(), err)
 			continue
 		}
 		// Scale price*supply to @DECIMALS decimals.

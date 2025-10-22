@@ -34,7 +34,7 @@ func init() {
 	writeTickerSeconds, err = strconv.Atoi(utils.Getenv("WRITE_TICKER_SECONDS", "120"))
 	if err != nil {
 		log.Errorf("parse WRITE_TICKER_SECONDS: %v", err)
-		configUpdateSeconds = 120
+		writeTickerSeconds = 120
 	}
 }
 
@@ -166,6 +166,7 @@ func handleData(ctx context.Context, scraper scrapers.IScraper, wg *sync.WaitGro
 		select {
 		case d := <-scraper.DataChannel():
 			log.Info("channel out: ", d)
+			log.Infof("symbol -- fairValueNative: %s -- %v", d.Symbol, d.FairValueNative)
 			collectorChannel <- d
 		case <-ctx.Done():
 			log.Warn("close data handler for scraper ", scraper.GetConfig().Symbol)

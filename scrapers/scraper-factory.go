@@ -83,6 +83,12 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 	log.Infof("start %s scraper.", config.Symbol)
 
 	switch asset {
+
+	// pBTC
+	case models.Asset{Blockchain: models.ETHEREUM_HOLESKY, Address: "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359"}:
+		cer := NewpBTCScraper(config)
+		return cer
+
 	// USDp
 	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x6efeDDF9269c3683Ba516cb0e2124FE335F262a2"}:
 		cer := NewUSDPScraperScraper(config)

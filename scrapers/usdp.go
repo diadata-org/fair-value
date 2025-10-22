@@ -40,7 +40,8 @@ func NewUSDPScraperScraper(config models.FeedConfig) *USDPScraper {
 	}
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_USDP", ""))
 	if err != nil {
-		log.Fatalf("get ETH client for %s: %v", scraper.config.Symbol, err)
+		log.Errorf("USDp -- get ETH client for %s: %v", scraper.config.Symbol, err)
+		return nil
 	}
 	scraper.client = client
 	return &scraper
@@ -83,8 +84,8 @@ func (scraper *USDPScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 		amount := new(big.Float).Quo(big.NewFloat(0).SetInt(redemptionCurve.Amounts[i]), big.NewFloat(SCALING))
 		redemption := oracleValues.Redemption
 		price, _ := new(big.Float).Mul(amount, big.NewFloat(0).SetInt(redemption)).Int(nil)
-		log.Debug("price: ", price.String())
-		log.Debugf("token --- amount -- price: %s -- %s -- %s", token.Hex(), amount.String(), redemption.String())
+		log.Debug("USDp -- price: ", price.String())
+		log.Debugf("USDp -- token --- amount -- price: %s -- %s -- %s", token.Hex(), amount.String(), redemption.String())
 		totalValueUnderlying.Add(totalValueUnderlying, price)
 	}
 	return
