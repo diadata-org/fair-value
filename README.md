@@ -1,4 +1,4 @@
-# fair-value-feeder
+# fair-value feeder
 
 <p align="center">
     <img src="./assets/DIA_logo.png" alt="Dia logo" width="200" height="auto" style="padding: 20px;">
