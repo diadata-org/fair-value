@@ -22,15 +22,27 @@ type BMTonScraper struct {
 	blockchain      string
 	contractAddress string
 	config          models.FeedConfig
+	api             *ton.APIClient
 }
 
 func NewBMTonScraper(config models.FeedConfig) *BMTonScraper {
-	return &BMTonScraper{
+	scraper := BMTonScraper{
 		BaseScraper:     NewBaseScraper(),
 		blockchain:      config.Blockchain,
 		contractAddress: config.Address,
 		config:          config,
 	}
+
+	// Connect to TON mainnet
+	client := liteclient.NewConnectionPool()
+	err := client.AddConnectionsFromConfigUrl(context.Background(), "https://ton.org/global-config.json")
+	if err != nil {
+		return nil
+	}
+	api := ton.NewAPIClient(client)
+	scraper.api = api
+
+	return &scraper
 }
 
 func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, totalTonValue *big.Int, err error) {
@@ -65,15 +77,6 @@ func (scraper *BMTonScraper) GetConfig() models.FeedConfig {
 
 func (scraper *BMTonScraper) getBmtonExecutionResult() (result *ton.ExecutionResult, err error) {
 
-	// Connect to TON mainnet
-	client := liteclient.NewConnectionPool()
-	err = client.AddConnectionsFromConfigUrl(context.Background(), "https://ton.org/global-config.json")
-	if err != nil {
-		return
-	}
-
-	api := ton.NewAPIClient(client)
-
 	// Resolve contract address
 	contractAddr := address.MustParseAddr(scraper.config.Address)
 
@@ -82,11 +85,11 @@ func (scraper *BMTonScraper) getBmtonExecutionResult() (result *ton.ExecutionRes
 
 	// Get latest masterchain block
 	var block *ton.BlockIDExt
-	block, err = api.CurrentMasterchainInfo(ctx)
+	block, err = scraper.api.CurrentMasterchainInfo(ctx)
 	if err != nil {
 		return
 	}
 
-	return api.RunGetMethod(ctx, block, contractAddr, "get_full_data")
+	return scraper.api.RunGetMethod(ctx, block, contractAddr, "get_full_data")
 
 }
