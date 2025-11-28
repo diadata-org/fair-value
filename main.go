@@ -38,7 +38,7 @@ func init() {
 
 func main() {
 
-	// On-chain setup.
+	// On-chain setup
 	deployedContract := utils.Getenv("DEPLOYED_CONTRACT", "")
 	chainId, err := strconv.ParseInt(utils.Getenv("CHAIN_ID", "100640"), 10, 64)
 	if err != nil {
@@ -74,17 +74,20 @@ func main() {
 		utils.Getenv("METRICS_PORT", "9090"),
 	)
 
-	// Fetch feeder configs.
+	// Setting up feeders.
 	feedConfigs, err = models.GetFeedsFromConfig("fair-value-feeds.json")
 	if err != nil {
 		log.Fatal("GetFeedsFromConfig: ", err)
+	}
+	for _, fc := range feedConfigs {
+		log.Infof("loaded %s from config. %s -- %s", fc.Symbol, fc.Blockchain, fc.Address)
 	}
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	collectorChannel := make(chan models.FairValueData)
 
-	// Create scrapers for all assets in the feeder config file.
+	// Create scrapers for all assets available in config file.
 	allIscrapers := make(map[string]scrapers.IScraper)
 	for _, config := range feedConfigs {
 		ctx, cancel := context.WithCancel(context.Background())
