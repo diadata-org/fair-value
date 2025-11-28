@@ -62,16 +62,18 @@ type INetAssetValue interface {
 }
 
 // MAKECERData computes all return values for the IContractExchangeRate interface.
-func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData, err error) {
+func MakeCERData(scraper IContractExchangeRate) (models.FairValueData, error) {
+
+	var data models.FairValueData
 
 	underlying, underlyingValue, err := scraper.TotalUnderlying()
 	if err != nil {
-		return
+		return data, err
 	}
 
 	totalShares, err := scraper.TotalShares()
 	if err != nil {
-		return
+		return data, err
 	}
 
 	config := scraper.GetConfig()
@@ -110,7 +112,7 @@ func MakeCERData(scraper IContractExchangeRate) (data models.FairValueData, err 
 	data.Time = time.Now()
 	log.Debugf("price for address %s: %v", config.Address, data.PriceUSD)
 
-	return
+	return data, err
 }
 
 // TO DO: Is this the best way to produce data?

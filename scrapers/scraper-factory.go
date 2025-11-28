@@ -85,7 +85,7 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 	switch asset {
 
 	// pBTC
-	case models.Asset{Blockchain: models.ETHEREUM_HOLESKY, Address: "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359"}:
+	case models.Asset{Blockchain: models.ARBITRUM_SEPOLIA, Address: "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359"}:
 		cer := NewpBTCScraper(config)
 		return cer
 

@@ -4,7 +4,7 @@ const (
 	BINANCESMARTCHAIN = "BinanceSmartChain"
 	BITCOIN           = "Bitcoin"
 	ETHEREUM          = "Ethereum"
-	ETHEREUM_HOLESKY  = "Ethereum-Holesky"
+	ARBITRUM_SEPOLIA  = "Arbitrum-Sepolia"
 	TONCHAIN          = "Tonchain"
 	UNICHAIN          = "Unichain"
 )

@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"strconv"
 
 	pbtc "github.com/diadata-org/fair-value/contracts/pbtc"
 	"github.com/diadata-org/fair-value/models"
@@ -48,13 +49,18 @@ type ScantxoutsetResponse struct {
 
 func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
 
+	contractCreation, err := strconv.Atoi(utils.Getenv("CONTRACT_CREATION_PBTC", "216834000"))
+	if err != nil {
+		log.Error("parse CONTRACT_CREATION_PBTC: ", err)
+		contractCreation = 216834000
+	}
 	scraper := pBTCScraper{
 		BaseScraper:      NewBaseScraper(),
 		blockchain:       config.Blockchain,
 		contractAddress:  common.HexToAddress(config.Address),
 		bitcoinRPC:       utils.Getenv("BITCOIN_RPC_NODE_PBTC", ""),
 		config:           config,
-		contractCreation: uint64(4000000),
+		contractCreation: uint64(contractCreation),
 		chunkSize:        uint64(10000),
 	}
 
@@ -80,7 +86,7 @@ func (scraper *pBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 
 	// Compute balances of reserve wallets from config.
 	if len(scraper.config.Params) > 0 {
-		for _, wallet := range scraper.config.Params[0].([]any) {
+		for _, wallet := range scraper.config.Params[1].([]any) {
 			var balance float64
 			balance, err = scraper.getBitcoinWalletBalance(wallet.(string))
 			if err != nil {
