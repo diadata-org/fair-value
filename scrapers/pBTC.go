@@ -229,7 +229,11 @@ func (scraper *pBTCScraper) getBitcoinWalletBalance(walletAddress string) (float
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
 	var rpcResp ScantxoutsetResponse
 	if err := json.Unmarshal(body, &rpcResp); err != nil {
 		return 0, err
