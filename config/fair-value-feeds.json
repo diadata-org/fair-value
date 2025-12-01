@@ -5,7 +5,7 @@
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
             "Address": "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359",
             "Blockchain": "Arbitrum-Sepolia",
-            "Update_Seconds": 60,
+            "Update_Seconds": 300,
             "Params": ["", ["bc1qvy9ktnw5wsn5w2qvklry4xvgrg5qxuc8pgpjr5"]]
         },
         {
