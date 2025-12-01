@@ -204,9 +204,6 @@ func (scraper *pBTCScraper) getReserveWallets() (reserveWallets []string, err er
 
 func (scraper *pBTCScraper) getBitcoinWalletBalance(walletAddress string) (float64, error) {
 
-	// // Example
-	// walletAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
-
 	// Prepare scantxoutset RPC payload
 	payload := RPCRequest{
 		Jsonrpc: "1.0",
@@ -214,7 +211,10 @@ func (scraper *pBTCScraper) getBitcoinWalletBalance(walletAddress string) (float
 		Method:  "scantxoutset",
 		Params:  []interface{}{"start", []string{fmt.Sprintf("addr(%s)", walletAddress)}},
 	}
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
 
 	req, err := http.NewRequest("POST", scraper.bitcoinRPC, bytes.NewBuffer(data))
 	if err != nil {
@@ -232,6 +232,9 @@ func (scraper *pBTCScraper) getBitcoinWalletBalance(walletAddress string) (float
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, err
+	}
+	if resp.StatusCode != 200 {
+		log.Errorf("pBTC -- Bitcoin RPC http error, i.e. status code %v for wallet %s", resp.StatusCode, walletAddress)
 	}
 
 	var rpcResp ScantxoutsetResponse
