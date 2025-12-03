@@ -86,7 +86,7 @@ func GetBitcoinWalletBalance(walletAddress string, bitcoinRPC string) (float64, 
 
 func GetBitcoinWalletBalanceAnkr(wallet string) (balance float64, err error) {
 	url := ANKR_BASE_URL +
-		Getenv("ANKR_BITCOIN_API_KEY", "b710a23d1ed3254312491ad8c59895508ed3bde21b92053938fd130c68249bd6") +
+		Getenv("ANKR_BITCOIN_API_KEY", "") +
 		"/api/v2/address/" + wallet
 
 	data, _, err := GetRequest(url)
