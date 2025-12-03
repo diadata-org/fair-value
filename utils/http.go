@@ -1,0 +1,43 @@
+package utils
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+
+	log "github.com/sirupsen/logrus"
+)
+
+// GetRequest performs a get request on @url and returns the response body
+// as a slice of byte data.
+func GetRequest(url string) ([]byte, int, error) {
+
+	response, err := http.Get(url) //nolint:noctx,gosec
+	if err != nil {
+		log.Error("get request: ", err)
+		return []byte{}, 0, err
+	}
+
+	// Close response body after function
+	defer func() {
+		cerr := response.Body.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
+
+	// Check the status code for a 200 so we know we have received a
+	// proper response.
+	if response.StatusCode != 200 {
+		return []byte{}, response.StatusCode, fmt.Errorf("Get HTTP Response Error %d for url %s", response.StatusCode, url)
+	}
+
+	// Read the response body
+	XMLdata, err := io.ReadAll(response.Body)
+	if err != nil {
+		log.Error(err)
+		return []byte{}, response.StatusCode, err
+	}
+
+	return XMLdata, response.StatusCode, err
+}

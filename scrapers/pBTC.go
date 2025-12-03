@@ -1,13 +1,8 @@
 package scrapers
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"math/big"
-	"net/http"
 	"strconv"
 
 	pbtc "github.com/diadata-org/fair-value/contracts/pbtc"
@@ -20,31 +15,17 @@ import (
 
 type pBTCScraper struct {
 	BaseScraper
-	client           *ethclient.Client
-	bitcoinRPC       string
-	blockchain       string
-	contractAddress  common.Address
-	poolID           common.Hash
-	lpTokenAddress   common.Address
-	config           models.FeedConfig
-	contractCreation uint64
-	chunkSize        uint64
-}
-
-// RPC request payload
-type RPCRequest struct {
-	Jsonrpc string        `json:"jsonrpc"`
-	ID      string        `json:"id"`
-	Method  string        `json:"method"`
-	Params  []interface{} `json:"params"`
-}
-
-// RPC response for scantxoutset
-type ScantxoutsetResponse struct {
-	Result struct {
-		TotalAmount float64 `json:"total_amount"`
-	} `json:"result"`
-	Error interface{} `json:"error"`
+	client          *ethclient.Client
+	bitcoinRPC      string
+	blockchain      string
+	contractAddress common.Address
+	poolID          common.Hash
+	lpTokenAddress  common.Address
+	config          models.FeedConfig
+	bitcoinAPI      string
+	lastBlock       uint64
+	reserveWallets  map[string]struct{}
+	chunkSize       uint64
 }
 
 func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
@@ -55,13 +36,15 @@ func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
 		contractCreation = 216834000
 	}
 	scraper := pBTCScraper{
-		BaseScraper:      NewBaseScraper(),
-		blockchain:       config.Blockchain,
-		contractAddress:  common.HexToAddress(config.Address),
-		bitcoinRPC:       utils.Getenv("BITCOIN_RPC_NODE_PBTC", ""),
-		config:           config,
-		contractCreation: uint64(contractCreation),
-		chunkSize:        uint64(10000),
+		BaseScraper:     NewBaseScraper(),
+		blockchain:      config.Blockchain,
+		contractAddress: common.HexToAddress(config.Address),
+		bitcoinRPC:      utils.Getenv("BITCOIN_RPC_NODE_PBTC", ""),
+		config:          config,
+		bitcoinAPI:      utils.Getenv("BITCOIN_API_SOURCE_PBTC", "ANKR"),
+		lastBlock:       uint64(contractCreation),
+		reserveWallets:  make(map[string]struct{}),
+		chunkSize:       uint64(10000),
 	}
 
 	if len(config.Params) > 0 {
@@ -88,33 +71,48 @@ func (scraper *pBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 	if len(scraper.config.Params) > 0 {
 		for _, wallet := range scraper.config.Params[1].([]any) {
 			var balance float64
-			balance, err = scraper.getBitcoinWalletBalance(wallet.(string))
+
+			switch scraper.bitcoinAPI {
+			case "CHAINSTACK":
+				balance, err = utils.GetBitcoinWalletBalance(wallet.(string), scraper.bitcoinRPC)
+			case "ANKR":
+				balance, err = utils.GetBitcoinWalletBalanceAnkr(wallet.(string))
+			}
 			if err != nil {
 				log.Errorf("pBTC -- getBitcoinWalletBalance for address %s: %v", wallet, err)
 				return
 			}
+
 			log.Debugf("pBTC -- balance for %s: %v", wallet, balance)
 			totalBalance += balance
 		}
 	}
 	log.Debugf("pBTC -- total balance for config wallets: %v", totalBalance)
 
-	reserveWallets, err := scraper.getReserveWallets()
+	err = scraper.getReserveWallets()
 	if err != nil {
 		return
 	}
-	log.Debug("pBTC -- reserveWallets: ", reserveWallets)
+	log.Debug("pBTC -- reserveWallets: ", scraper.reserveWallets)
 
 	// Add balances from custodian deposit wallet addresses.
-	for _, wallet := range reserveWallets {
+	for wallet := range scraper.reserveWallets {
 		var balance float64
-		balance, err = scraper.getBitcoinWalletBalance(wallet)
+
+		switch scraper.bitcoinAPI {
+		case "CHAINSTACK":
+			balance, err = utils.GetBitcoinWalletBalance(wallet, scraper.bitcoinRPC)
+		case "ANKR":
+			balance, err = utils.GetBitcoinWalletBalanceAnkr(wallet)
+		}
 		if err != nil {
 			log.Errorf("pBTC -- getBitcoinWalletBalance for address %s: %v", wallet, err)
 			return
 		}
+
 		totalBalance += balance
 		log.Debugf("pBTC -- balance for %s: %v", wallet, balance)
+
 	}
 	log.Debugf("pBTC -- total balance for all wallets: %v", totalBalance)
 
@@ -152,7 +150,7 @@ func (scraper *pBTCScraper) Close() chan bool {
 	return scraper.BaseScraper.Close()
 }
 
-func (scraper *pBTCScraper) getReserveWallets() (reserveWallets []string, err error) {
+func (scraper *pBTCScraper) getReserveWallets() (err error) {
 	pbtcFilterer, err := pbtc.NewPbtcFilterer(scraper.contractAddress, scraper.client)
 	if err != nil {
 		return
@@ -163,9 +161,9 @@ func (scraper *pBTCScraper) getReserveWallets() (reserveWallets []string, err er
 	if err != nil {
 		return
 	}
-	log.Debugf("pBTC -- startBlock -- currentBlock: %v -- %v ", scraper.contractCreation, currentBlockNumber)
-	startblock := scraper.contractCreation
-	endblock := scraper.contractCreation + scraper.chunkSize
+	log.Debugf("pBTC -- startBlock -- currentBlock: %v -- %v ", scraper.lastBlock, currentBlockNumber)
+	startblock := scraper.lastBlock
+	endblock := scraper.lastBlock + scraper.chunkSize
 
 	for endblock < currentBlockNumber+scraper.chunkSize {
 
@@ -175,6 +173,7 @@ func (scraper *pBTCScraper) getReserveWallets() (reserveWallets []string, err er
 		if currentBlockNumber > endblock {
 			log.Tracef("pBTC -- blocks left: %v", currentBlockNumber-endblock)
 		}
+		log.Debugf("pBTC -- filter custodian wallets from block %v to %v", startblock, endblock)
 		setDepositAddress, err := pbtcFilterer.FilterCustodianBtcDepositAddressSet(
 			&bind.FilterOpts{
 				Start: startblock,
@@ -191,7 +190,9 @@ func (scraper *pBTCScraper) getReserveWallets() (reserveWallets []string, err er
 		}
 
 		for setDepositAddress.Next() {
-			reserveWallets = append(reserveWallets, setDepositAddress.Event.BtcDepositAddress)
+			if _, ok := scraper.reserveWallets[setDepositAddress.Event.BtcDepositAddress]; !ok {
+				scraper.reserveWallets[setDepositAddress.Event.BtcDepositAddress] = struct{}{}
+			}
 		}
 
 		// increment block range for the next iteration.
@@ -199,52 +200,7 @@ func (scraper *pBTCScraper) getReserveWallets() (reserveWallets []string, err er
 		endblock = startblock + scraper.chunkSize
 	}
 
+	scraper.lastBlock = startblock
+
 	return
-}
-
-func (scraper *pBTCScraper) getBitcoinWalletBalance(walletAddress string) (float64, error) {
-
-	// Prepare scantxoutset RPC payload
-	payload := RPCRequest{
-		Jsonrpc: "1.0",
-		ID:      "curltest",
-		Method:  "scantxoutset",
-		Params:  []interface{}{"start", []string{fmt.Sprintf("addr(%s)", walletAddress)}},
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return 0, err
-	}
-
-	req, err := http.NewRequest("POST", scraper.bitcoinRPC, bytes.NewBuffer(data))
-	if err != nil {
-		return 0, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-	if resp.StatusCode != 200 {
-		log.Errorf("pBTC -- Bitcoin RPC http error, i.e. status code %v for wallet %s", resp.StatusCode, walletAddress)
-	}
-
-	var rpcResp ScantxoutsetResponse
-	if err := json.Unmarshal(body, &rpcResp); err != nil {
-		return 0, err
-	}
-
-	if rpcResp.Error != nil {
-		return 0, err
-	}
-
-	return rpcResp.Result.TotalAmount, nil
 }
