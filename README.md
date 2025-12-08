@@ -42,11 +42,11 @@ It is worth noting that `fairValue` is only non-zero in case the considered asse
 - Create a `.env` file in the same directory as `docker-compose.yaml`. This file should contain the following variables:
 
 ```
-SOURCE=TwelveData
-
 # Node operator configuration (MUST be filled by node operators)
 PRIVATE_KEY=
 NODE_OPERATOR_NAME=""
+# https://github.com/diadata-org/decentral-data-feeder/wiki/Chain-Info
+CHAIN_ID=
 DEPLOYED_CONTRACT=""
 BLOCKCHAIN_NODE=""
 BACKUP_NODE=""
@@ -58,8 +58,7 @@ PUSHGATEWAY_PASSWORD=
 PUSHGATEWAY_URL=
 
 # Chain configuration
-# https://github.com/diadata-org/decentral-data-feeder/wiki/Chain-Info
-CHAIN_ID=
+
 UPDATE_SECONDS=80
 CONFIG_UPDATE_SECONDS=86400
 WRITE_TICKER_SECONDS=3600
