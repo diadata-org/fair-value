@@ -41,7 +41,7 @@ func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
 		contractAddress: common.HexToAddress(config.Address),
 		bitcoinRPC:      utils.Getenv("BITCOIN_RPC_NODE_PBTC", ""),
 		config:          config,
-		bitcoinAPI:      utils.Getenv("BITCOIN_API_SOURCE_PBTC", "ANKR"),
+		bitcoinAPI:      utils.Getenv("BITCOIN_API_SOURCE_PBTC", "MEMPOOL"),
 		lastBlock:       uint64(contractCreation),
 		reserveWallets:  make(map[string]struct{}),
 		chunkSize:       uint64(10000),
@@ -77,6 +77,11 @@ func (scraper *pBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 				balance, err = utils.GetBitcoinWalletBalance(wallet.(string), scraper.bitcoinRPC)
 			case "ANKR":
 				balance, err = utils.GetBitcoinWalletBalanceAnkr(wallet.(string))
+			case "MEMPOOL":
+				balance, err = utils.GetBitcoinWalletBalanceMempool(wallet.(string))
+				if err != nil {
+					balance, err = utils.GetBitcoinWalletBalanceAnkr(wallet.(string))
+				}
 			}
 			if err != nil {
 				log.Errorf("pBTC -- getBitcoinWalletBalance for address %s: %v", wallet, err)
@@ -104,6 +109,11 @@ func (scraper *pBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 			balance, err = utils.GetBitcoinWalletBalance(wallet, scraper.bitcoinRPC)
 		case "ANKR":
 			balance, err = utils.GetBitcoinWalletBalanceAnkr(wallet)
+		case "MEMPOOL":
+			balance, err = utils.GetBitcoinWalletBalanceMempool(wallet)
+			if err != nil {
+				balance, err = utils.GetBitcoinWalletBalanceAnkr(wallet)
+			}
 		}
 		if err != nil {
 			log.Errorf("pBTC -- getBitcoinWalletBalance for address %s: %v", wallet, err)

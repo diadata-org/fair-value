@@ -1,0 +1,7 @@
+  services:
+    fair-value-feeder:
+      image: diadata/fair-value-feeder:<VERSION>
+      # for latest image versions see https://hub.docker.com/r/diadata/fair-value/tags
+      env_file:
+        - .env.fair-value-feeder
+      restart: always

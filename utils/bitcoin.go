@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	ANKR_BASE_URL = "https://rpc.ankr.com/premium-http/btc_blockbook/"
+	ANKR_BASE_URL    = "https://rpc.ankr.com/premium-http/btc_blockbook/"
+	MEMPOOL_BASE_URL = "https://mempool.space/api/"
 )
 
 type ankrAPIResponse struct {
@@ -18,6 +19,10 @@ type ankrAPIResponse struct {
 	TotalReceived      string `json:"totalReceived"`
 	TotalSent          string `json:"totalSent"`
 	UnconfirmedBalance string `json:"unconfirmedBalance"`
+}
+
+type mempoolAPIResponse struct {
+	Value int `json:"value"`
 }
 
 // RPC request payload
@@ -105,6 +110,25 @@ func GetBitcoinWalletBalanceAnkr(wallet string) (balance float64, err error) {
 		return
 	}
 	balance = float64(balanceInt) / 1e8
+	return
+
+}
+
+func GetBitcoinWalletBalanceMempool(wallet string) (balance float64, err error) {
+	url := MEMPOOL_BASE_URL + "address/" + wallet + "/utxo"
+
+	data, _, err := GetRequest(url)
+	if err != nil {
+		return
+	}
+
+	var mr []mempoolAPIResponse
+	err = json.Unmarshal(data, &mr)
+	if err != nil {
+		return
+	}
+
+	balance = float64(mr[0].Value) / 1e8
 	return
 
 }

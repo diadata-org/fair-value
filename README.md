@@ -45,7 +45,8 @@ It is worth noting that `fairValue` is only non-zero in case the considered asse
 # Node operator configuration (MUST be filled by node operators)
 PRIVATE_KEY=
 NODE_OPERATOR_NAME=""
-# https://github.com/diadata-org/decentral-data-feeder/wiki/Chain-Info
+# Chain configuration
+# https://github.com/diadata-org/fair-value/wiki/Chain-Info
 CHAIN_ID=
 DEPLOYED_CONTRACT=""
 BLOCKCHAIN_NODE=""
@@ -57,11 +58,16 @@ PUSHGATEWAY_USER=
 PUSHGATEWAY_PASSWORD=
 PUSHGATEWAY_URL=
 
-# Chain configuration
-
-UPDATE_SECONDS=80
+# Main parameters
+WRITE_TICKER_SECONDS=300
 CONFIG_UPDATE_SECONDS=86400
 WRITE_TICKER_SECONDS=3600
+
+# Scraper parameters
+CONTRACT_CREATION_PBTC=""
+RPC_NODE_EVM_PBTC=""
+BITCOIN_API_SOURCE_PBTC=""
+ANKR_BITCOIN_API_KEY=""
 ```
 
 Please refer to the [.env.example](./docker-compose/.env.example) file for the exact environment variables to set.
