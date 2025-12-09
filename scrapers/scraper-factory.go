@@ -79,33 +79,28 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
 
 func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 
-	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
-	log.Infof("start %s scraper.", config.Symbol)
+	symbol := config.Symbol
+	log.Infof("start %s scraper.", symbol)
 
-	switch asset {
+	switch symbol {
 
-	// pBTC
-	case models.Asset{Blockchain: models.ARBITRUM_SEPOLIA, Address: "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359"}:
+	case "pBTC":
 		cer := NewpBTCScraper(config)
 		return cer
 
-	// USDp
-	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x6efeDDF9269c3683Ba516cb0e2124FE335F262a2"}:
+	case "USDp":
 		cer := NewUSDPScraperScraper(config)
 		return cer
 
-	// bmTON
-	case models.Asset{Blockchain: models.TONCHAIN, Address: "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY"}:
+	case "bmTON":
 		cer := NewBMTonScraper(config)
 		return cer
 
-	// satUSD+
-	case models.Asset{Blockchain: models.BINANCESMARTCHAIN, Address: "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872"}:
+	case "satUSD+":
 		cer := NewSatusdScraper(config)
 		return cer
 
-	// Bunnihub
-	case models.Asset{Blockchain: models.UNICHAIN, Address: "0x78fd58693ff7796fDF565bD744fdC21CB9B49C6c"}:
+	case "hOHM":
 		cer := NewBunnihubScraper(config)
 		return cer
 	}
