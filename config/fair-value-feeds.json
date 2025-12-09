@@ -5,39 +5,8 @@
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
             "Address": "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359",
             "Blockchain": "Arbitrum-Sepolia",
-            "Update_Seconds": 300,
+            "Update_Seconds": 600,
             "Params": ["", ["bc1qvy9ktnw5wsn5w2qvklry4xvgrg5qxuc8pgpjr5"]]
-        },
-        {
-            "Symbol": "USDp",
-            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
-            "Address": "0x6efeDDF9269c3683Ba516cb0e2124FE335F262a2",
-            "Blockchain": "Ethereum",
-            "Update_Seconds": 60,
-            "Params": []
-        },
-        {
-            "Symbol": "bmTON",
-            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
-            "Address": "EQCSxGZPHqa3TtnODgMan8CEM0jf6HpY-uon_NMeFgjKqkEY",
-            "Blockchain": "Tonchain",
-            "Update_Seconds": 300,
-            "Params": []
-        },
-        {
-            "Symbol": "satUSD+",
-            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
-            "Address": "0x03d9C4E4BC5D3678A9076caC50dB0251D8676872",
-            "Blockchain": "BinanceSmartChain",
-            "Update_Seconds": 300
-        },
-        {
-            "Symbol": "hOHM",
-            "Feed_Type": "NET_ASSET_VALUE",
-            "Address": "0x1db1591540d7a6062be0837ca3c808add28844f6",
-            "Blockchain": "Ethereum",
-            "Update_Seconds": 300
-        }
-       
+        }       
     ]
 }
