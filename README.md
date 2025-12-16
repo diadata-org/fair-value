@@ -8,6 +8,7 @@ The node setup instructions are available in our [Wiki](https://github.com/diada
 
 This repository hosts a self-contained application for running a fair-value feeder in the Lumina oracle network. The main purpose of a fair-value feeder is to determine the price of reserve backed assets. It consists of a class of scrapers which collect supply and price data from various on-chain sources. As there is a variety of implementations of such reserve backed asset products, the class consists of different ways on how to come up with a price for the considered asset. For the same reason, the meaning of the values determined by the feeder vary depending on the considered asset class.
 In general, the executable feeds a smart contract by writing the following 5 values:
+
 ```
 fairValue:   The dimensionless price of an asset backed by a single reserve asset given by the amount of the reserve divided by the amount of the asset.
 valueUsd:    The USD price of the asset.
@@ -15,6 +16,7 @@ numerator:   The amount of the reserve asset in case of a single reserve asset. 
 denominator: The amount of the asset in case of a single reserve asset. The USD price of the total amount of the asset in case of multiple reserve assets.
 timestamp:   Unix timestamp of the oracle update.
 ```
+
 It does so by fetching the total supply and the associated reserve tokens along with their amounts for various reserve-backed assets.\
 It is worth noting that `fairValue` is only non-zero in case the considered asset has a single reserve asset, as in case of multiple reserve assets, we cannot assign a meaningful number to the considered quotient.
 
@@ -97,7 +99,6 @@ Please refer to the [.env.example](./docker-compose/.env.example) file for the e
   docker-compose logs -f
   ```
 
-
 - You can optionally cleanup the deployment once you're done by running:
 
   ```
@@ -133,7 +134,7 @@ If any issues arise during deployment, follow these steps:
 
 - Ensure you're using the correct image version:
   ```bash
-  docker pull diadata/decentralized-data-feeder:<VERSION>
+  docker pull diadata/fair-value:<VERSION>:<VERSION>
   ```
 - Apply fixes and redeploy.
 
