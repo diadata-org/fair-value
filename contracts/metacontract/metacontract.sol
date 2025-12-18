@@ -1,20 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.20;
+pragma solidity 0.8.29;
 
 interface IValueStore {
     function getValue(
         string memory key
-    ) external view returns (
-        uint256 fairValue,
-        uint256 usdValue,
-        uint256 numerator,
-        uint256 denominator,
-        uint256 timestamp
-    );
+    )
+        external
+        view
+        returns (
+            uint256 fairValue,
+            uint256 usdValue,
+            uint256 numerator,
+            uint256 denominator,
+            uint256 timestamp
+        );
 }
 
 library QuickSort {
-    function sort(uint256[] memory arr, uint256 left, uint256 right) internal pure {
+    function sort(
+        uint256[] memory arr,
+        uint256 left,
+        uint256 right
+    ) internal pure {
         if (left >= right) return;
         uint256 i = left;
         uint256 j = right;
@@ -49,6 +56,11 @@ contract ValueStoreMetaAggregator {
     uint256 public threshold;
     uint256 public timeoutSeconds;
     address public owner;
+
+    bytes32 private constant FAIR_VALUE = keccak256("fairValue");
+    bytes32 private constant USD_VALUE = keccak256("usdValue");
+    bytes32 private constant NUMERATOR = keccak256("numerator");
+    bytes32 private constant DENOMINATOR = keccak256("denominator");
 
     error InvalidThreshold(uint256);
     error InvalidTimeout(uint256);
@@ -96,11 +108,9 @@ contract ValueStoreMetaAggregator {
         timeoutSeconds = newTimeout;
     }
 
-    function getMedianValues(string memory key)
-        external
-        view
-        returns (MedianSet memory)
-    {
+    function getMedianValues(
+        string memory key
+    ) external view returns (MedianSet memory) {
         if (threshold == 0) revert InvalidThreshold(threshold);
         if (timeoutSeconds == 0) revert InvalidTimeout(timeoutSeconds);
 
@@ -112,7 +122,13 @@ contract ValueStoreMetaAggregator {
 
         for (uint256 i = 0; i < numValueStores; ++i) {
             IValueStore store = IValueStore(valueStores[i]);
-            (uint256 fairV, uint256 usdV, uint256 num, uint256 den, uint256 ts) = store.getValue(key);
+            (
+                uint256 fairV,
+                uint256 usdV,
+                uint256 num,
+                uint256 den,
+                uint256 ts
+            ) = store.getValue(key);
 
             if (ts + timeoutSeconds < block.timestamp) continue;
 
@@ -133,12 +149,76 @@ contract ValueStoreMetaAggregator {
 
         uint256 mid = count / 2;
 
-        return MedianSet({
-            fairValue: fairValues[mid],
-            usdValue: usdValues[mid],
-            numerator: nums[mid],
-            denominator: dens[mid],
-            timestamp: block.timestamp
-        });
+        return
+            MedianSet({
+                fairValue: fairValues[mid],
+                usdValue: usdValues[mid],
+                numerator: nums[mid],
+                denominator: dens[mid],
+                timestamp: block.timestamp
+            });
+    }
+
+    function _parseKey(
+        string memory key
+    ) internal pure returns (bytes32 actionHash, string memory assetKey) {
+        bytes memory keyBytes = bytes(key);
+        uint256 len = keyBytes.length;
+
+        uint256 colonIndex = len;
+
+        for (uint256 i = 0; i < len; i++) {
+            if (keyBytes[i] == bytes1(":")) {
+                colonIndex = i;
+                break;
+            }
+        }
+
+        if (colonIndex >= len) {
+            return (bytes32(0), "");
+        }
+
+        bytes memory actionBytes = new bytes(colonIndex);
+        for (uint256 i = 0; i < colonIndex; i++) {
+            actionBytes[i] = keyBytes[i];
+        }
+        actionHash = keccak256(actionBytes);
+
+        uint256 assetLen = len - colonIndex - 1;
+        bytes memory assetBytes = new bytes(assetLen);
+        for (uint256 i = 0; i < assetLen; i++) {
+            assetBytes[i] = keyBytes[colonIndex + 1 + i];
+        }
+        assetKey = string(assetBytes);
+    }
+
+    function getValue(
+        string memory key
+    ) external view returns (uint128, uint128) {
+        (bytes32 actionHash, string memory assetKey) = _parseKey(key);
+
+        if (actionHash == bytes32(0)) {
+            return (uint128(0), uint128(0));
+        }
+
+        MedianSet memory m = this.getMedianValues(assetKey);
+
+        if (actionHash == FAIR_VALUE) {
+            return (uint128(m.fairValue), uint128(m.timestamp));
+        }
+
+        if (actionHash == USD_VALUE) {
+            return (uint128(m.usdValue), uint128(m.timestamp));
+        }
+
+        if (actionHash == NUMERATOR) {
+            return (uint128(m.numerator), uint128(m.timestamp));
+        }
+
+        if (actionHash == DENOMINATOR) {
+            return (uint128(m.denominator), uint128(m.timestamp));
+        }
+
+        return (uint128(m.fairValue), uint128(m.timestamp));
     }
 }
