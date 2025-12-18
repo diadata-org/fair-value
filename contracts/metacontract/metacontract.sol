@@ -204,7 +204,7 @@ contract ValueStoreMetaAggregator {
         MedianSet memory m = this.getMedianValues(assetKey);
 
         if (actionHash == FAIR_VALUE) {
-            return (uint128(m.fairValue), 0);
+            return (uint128(m.fairValue), uint128(m.timestamp));
         }
 
         if (actionHash == USD_VALUE) {
@@ -212,11 +212,11 @@ contract ValueStoreMetaAggregator {
         }
 
         if (actionHash == NUMERATOR) {
-            return (uint128(m.numerator), 0);
+            return (uint128(m.numerator), uint128(m.timestamp));
         }
 
         if (actionHash == DENOMINATOR) {
-            return (uint128(m.denominator), 0);
+            return (uint128(m.denominator), uint128(m.timestamp));
         }
 
         return (uint128(m.fairValue), uint128(m.timestamp));
