@@ -78,6 +78,11 @@ contract ValueStoreMetaAggregator {
         owner = _owner;
     }
 
+    function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert ZeroAddress();
+        owner = newOwner;
+    }
+
     function addValueStore(address newStore) external onlyOwner {
         if (newStore == address(0)) revert ZeroAddress();
         for (uint256 i = 0; i < numValueStores; ++i) {
