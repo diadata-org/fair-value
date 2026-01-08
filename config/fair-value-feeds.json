@@ -3,10 +3,10 @@
         {
             "Symbol": "pBTC",
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
-            "Address": "0xF0e7E2c829e54a6052d80E2c2107a494b00BC359",
-            "Blockchain": "Arbitrum-Sepolia",
+            "Address": "0x427Bb443F2fDa1EF25e261f007662ecab54644Ac",
+            "Blockchain": "Ethereum",
             "Update_Seconds": 240,
-            "Params": ["", ["bc1qvy9ktnw5wsn5w2qvklry4xvgrg5qxuc8pgpjr5"]]
+            "Params": ["", []]
         }       
     ]
 }
