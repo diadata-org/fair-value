@@ -30,10 +30,10 @@ type pBTCScraper struct {
 
 func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
 
-	contractCreation, err := strconv.Atoi(utils.Getenv("CONTRACT_CREATION_PBTC", "216834000"))
+	contractCreation, err := strconv.Atoi(utils.Getenv("CONTRACT_CREATION_PBTC", "24173056"))
 	if err != nil {
 		log.Error("parse CONTRACT_CREATION_PBTC: ", err)
-		contractCreation = 216834000
+		contractCreation = 24173056
 	}
 	scraper := pBTCScraper{
 		BaseScraper:     NewBaseScraper(),

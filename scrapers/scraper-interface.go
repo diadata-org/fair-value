@@ -84,15 +84,22 @@ func MakeCERData(scraper IContractExchangeRate) (models.FairValueData, error) {
 	if underlyingValue != nil {
 		numeratorFloat := big.NewFloat(0).SetInt(underlyingValue)
 		denominatorFloat := big.NewFloat(0).SetInt(totalShares)
-		priceUSD, _ = big.NewFloat(0).Quo(numeratorFloat, denominatorFloat).Float64()
+		if totalShares.Int64() != 0 {
+			priceUSD, _ = big.NewFloat(0).Quo(numeratorFloat, denominatorFloat).Float64()
+		}
 	}
 
 	// Compute fair value native
 	var fairValueNative float64
 	if underlying != nil {
-		numeratorFloat := big.NewFloat(0).SetInt(underlying)
-		denominatorFloat := big.NewFloat(0).SetInt(totalShares)
-		fairValueNative, _ = big.NewFloat(0).Quo(numeratorFloat, denominatorFloat).Float64()
+		if underlying.Int64() == 0 && totalShares.Int64() == 0 {
+			log.Warn("totalSupply is zero. Set fair value to 1.")
+			fairValueNative = float64(1)
+		} else {
+			numeratorFloat := big.NewFloat(0).SetInt(underlying)
+			denominatorFloat := big.NewFloat(0).SetInt(totalShares)
+			fairValueNative, _ = big.NewFloat(0).Quo(numeratorFloat, denominatorFloat).Float64()
+		}
 	}
 
 	data.Symbol = config.Symbol
