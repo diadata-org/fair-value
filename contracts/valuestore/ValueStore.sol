@@ -56,7 +56,7 @@ contract ValueStore {
         uint256 numerator,
         uint256 denominator
     ) external onlyOwner {
-        require(denominator != 0, "Denominator cannot be zero");
+        require(numerator == 0 || denominator != 0, "division by zero");
 
         data[key] = StoredValue({
             fairValue: fairValue,
@@ -94,7 +94,7 @@ contract ValueStore {
         );
 
         for (uint256 i = 0; i < keys.length; i++) {
-            require(denominators[i] != 0, "Denominator cannot be zero");
+            require(numerators[i] == 0 || denominators[i] != 0, "division by zero");
 
             data[keys[i]] = StoredValue({
                 fairValue: fairValues[i],

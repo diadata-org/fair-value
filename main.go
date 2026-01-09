@@ -29,10 +29,10 @@ func init() {
 		log.Errorf("parse CONFIG_UPDATE_SECONDS: %v", err)
 		configUpdateSeconds = 86400
 	}
-	writeTickerSeconds, err = strconv.Atoi(utils.Getenv("WRITE_TICKER_SECONDS", "120"))
+	writeTickerSeconds, err = strconv.Atoi(utils.Getenv("WRITE_TICKER_SECONDS", "300"))
 	if err != nil {
 		log.Errorf("parse WRITE_TICKER_SECONDS: %v", err)
-		writeTickerSeconds = 120
+		writeTickerSeconds = 300
 	}
 }
 

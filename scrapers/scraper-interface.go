@@ -93,7 +93,7 @@ func MakeCERData(scraper IContractExchangeRate) (models.FairValueData, error) {
 	var fairValueNative float64
 	if underlying != nil {
 		if underlying.Int64() == 0 && totalShares.Int64() == 0 {
-			log.Warn("totalSupply is zero. Set fair value to 1.")
+			log.Warn("both totalSupply and supply of underlying are zero. Set fair value to 1.")
 			fairValueNative = float64(1)
 		} else {
 			numeratorFloat := big.NewFloat(0).SetInt(underlying)
