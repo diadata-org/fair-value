@@ -75,7 +75,16 @@ func main() {
 	)
 
 	// Setting up feeders.
-	feedConfigs, err = models.GetFeedsFromConfig("fair-value-feeds.json")
+	// Fetch configuration from local filesystem or remote github repository (default).
+	remoteConfig, err := strconv.ParseBool(utils.Getenv("REMOTE_CONFIG", "true"))
+	if err != nil {
+		log.Error("parse REMOTE_CONFIG: ", err)
+		remoteConfig = true
+	}
+
+	// fetch configuration from master branch per default.
+	branchConfig := utils.Getenv("BRANCH_CONFIG", "")
+	feedConfigs, err = models.GetFeedsFromConfig("fair-value-feeds.json", remoteConfig, branchConfig)
 	if err != nil {
 		log.Fatal("GetFeedsFromConfig: ", err)
 	}
@@ -104,7 +113,7 @@ func main() {
 
 		for range configTicker.C {
 
-			feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json")
+			feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json", remoteConfig, branchConfig)
 			if err != nil {
 				log.Error("GetFeedsFromConfig: ", err)
 			}

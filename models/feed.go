@@ -53,9 +53,9 @@ func GetDiffConfig(fcOld, fcNew []FeedConfig) (plus []FeedConfig, minus []FeedCo
 	return
 }
 
-func GetFeedsFromConfig(filename string) ([]FeedConfig, error) {
+func GetFeedsFromConfig(filename string, remoteConfig bool, branchConfig string) ([]FeedConfig, error) {
 
-	data, err := utils.ReadFile(filename)
+	data, err := utils.ReadFile(filename, remoteConfig, branchConfig)
 	if err != nil {
 		return []FeedConfig{}, err
 	}

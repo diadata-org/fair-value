@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
-	"os/user"
 )
 
 type GitHubContent struct {
@@ -15,32 +15,21 @@ type GitHubContent struct {
 	Encoding string `json:"encoding"`
 }
 
-// readFile reads a gitcoin submission json file and returns the slice of items.
-func readFromFile(filename string) (data []byte, err error) {
-	var (
-		jsonFile *os.File
-	)
-	path := os.Getenv("GOPATH") + "/src/github.com/diadata-org/fair-value/config/" + filename
-	jsonFile, err = os.Open(path)
-	if err != nil {
-		return
+func ReadFile(filename string, remoteConfig bool, branchConfig string) ([]byte, error) {
+	if remoteConfig {
+		return readFromRemote(filename, branchConfig)
 	}
-	defer func() {
-		cerr := jsonFile.Close()
-		if err == nil {
-			err = cerr
-		}
-	}()
-
-	return io.ReadAll(jsonFile)
-
+	return readFromFile(filename)
 }
 
-func readFromRemote(filename string) (data []byte, err error) {
+func readFromRemote(filename string, branchConfig string) (data []byte, err error) {
 
-	url := "https://api.github.com/repos/diadata-org/fair-value/contents/config/" + filename
+	URL := "https://api.github.com/repos/diadata-org/fair-value/contents/config/" + filename
+	if branchConfig != "" {
+		URL += "?ref=" + url.QueryEscape(branchConfig)
+	}
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", URL, nil)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -63,12 +52,23 @@ func readFromRemote(filename string) (data []byte, err error) {
 
 }
 
-func ReadFile(filename string) ([]byte, error) {
-	usr, _ := user.Current()
-	dir := usr.HomeDir
-	if dir == "/root" || dir == "/home" {
-		return readFromRemote(filename)
+// readFile reads a gitcoin submission json file and returns the slice of items.
+func readFromFile(filename string) (data []byte, err error) {
+	var (
+		jsonFile *os.File
+	)
+	path := os.Getenv("GOPATH") + "/src/github.com/diadata-org/fair-value/config/" + filename
+	jsonFile, err = os.Open(path)
+	if err != nil {
+		return
 	}
+	defer func() {
+		cerr := jsonFile.Close()
+		if err == nil {
+			err = cerr
+		}
+	}()
 
-	return readFromFile(filename)
+	return io.ReadAll(jsonFile)
+
 }
