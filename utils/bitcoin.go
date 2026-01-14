@@ -22,7 +22,12 @@ type ankrAPIResponse struct {
 }
 
 type mempoolAPIResponse struct {
-	Value int `json:"value"`
+	ChainStats mempoolChainStats `json:"chain_stats"`
+}
+
+type mempoolChainStats struct {
+	FundedTxoSum int `json:"funded_txo_sum"`
+	SpentTxoSum  int `json:"spent_txo_sum"`
 }
 
 // RPC request payload
@@ -115,22 +120,21 @@ func GetBitcoinWalletBalanceAnkr(wallet string) (balance float64, err error) {
 }
 
 func GetBitcoinWalletBalanceMempool(wallet string) (balance float64, err error) {
-	url := MEMPOOL_BASE_URL + "address/" + wallet + "/utxo"
+	url := MEMPOOL_BASE_URL + "address/" + wallet
 
 	data, _, err := GetRequest(url)
 	if err != nil {
 		return
 	}
 
-	var mr []mempoolAPIResponse
+	var mr mempoolAPIResponse
 	err = json.Unmarshal(data, &mr)
 	if err != nil {
 		return
 	}
 
-	for _, value := range mr {
-		balance += float64(value.Value) / 1e8
-	}
+	balance += float64(mr.ChainStats.FundedTxoSum-mr.ChainStats.SpentTxoSum) / 1e8
+
 	return
 
 }
