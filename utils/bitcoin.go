@@ -128,7 +128,9 @@ func GetBitcoinWalletBalanceMempool(wallet string) (balance float64, err error) 
 		return
 	}
 
-	balance = float64(mr[0].Value) / 1e8
+	for _, value := range mr {
+		balance += float64(value.Value) / 1e8
+	}
 	return
 
 }
