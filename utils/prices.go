@@ -6,6 +6,7 @@ import (
 	"net/http"
 )
 
+// TO DO: switch to Lumina prices.
 func GetDiaQuotationPrice(blockchain string, address string) (float64, error) {
 	url := fmt.Sprintf("https://api.diadata.org/v1/assetQuotation/%s/%s", blockchain, address)
 	resp, err := http.Get(url)

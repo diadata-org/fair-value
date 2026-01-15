@@ -88,6 +88,10 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 		cer := NewpBTCScraper(config)
 		return cer
 
+	case "hemiBTC":
+		cer := NewhemiBTCScraper(config)
+		return cer
+
 	case "USDp":
 		cer := NewUSDPScraperScraper(config)
 		return cer

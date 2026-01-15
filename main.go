@@ -172,8 +172,7 @@ func handleData(ctx context.Context, scraper scrapers.IScraper, wg *sync.WaitGro
 	for {
 		select {
 		case d := <-scraper.DataChannel():
-			log.Info("channel out: ", d)
-			log.Infof("symbol -- fairValueNative: %s -- %v", d.Symbol, d.FairValueNative)
+			log.Infof("symbol -- fairValueNative -- priceUSD: %s -- %v -- %v", d.Symbol, d.FairValueNative, d.PriceUSD)
 			collectorChannel <- d
 		case <-ctx.Done():
 			log.Warn("close data handler for scraper ", scraper.GetConfig().Symbol)
