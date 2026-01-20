@@ -17,7 +17,6 @@ type hemiBTCScraper struct {
 	bitcoinRPC      string
 	blockchain      string
 	contractAddress common.Address
-	poolID          common.Hash
 	config          models.FeedConfig
 	bitcoinAPI      string
 	chunkSize       uint64
@@ -33,10 +32,6 @@ func NewhemiBTCScraper(config models.FeedConfig) *hemiBTCScraper {
 		config:          config,
 		bitcoinAPI:      utils.Getenv("BITCOIN_API_SOURCE_HEMIBTC", "MEMPOOL"),
 		chunkSize:       uint64(10000),
-	}
-
-	if len(config.Params) > 0 {
-		scraper.poolID = common.HexToHash(config.Params[0].(string))
 	}
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_EVM_HEMIBTC", ""))

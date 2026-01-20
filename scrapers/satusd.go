@@ -21,7 +21,6 @@ type SatusdScraper struct {
 	client          *ethclient.Client
 	blockchain      string
 	contractAddress common.Address
-	poolID          common.Hash
 	lpTokenAddress  common.Address
 	config          models.FeedConfig
 }
@@ -33,10 +32,6 @@ func NewSatusdScraper(config models.FeedConfig) *SatusdScraper {
 		blockchain:      config.Blockchain,
 		contractAddress: common.HexToAddress(config.Address),
 		config:          config,
-	}
-
-	if len(config.Params) > 0 {
-		scraper.poolID = common.HexToHash(config.Params[0].(string))
 	}
 
 	scraper.lpTokenAddress = common.HexToAddress(config.Address)

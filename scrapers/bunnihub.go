@@ -45,7 +45,9 @@ func NewBunnihubScraper(config models.FeedConfig) *BunnihubScraper {
 	}
 
 	if len(config.Params) > 0 {
-		scraper.poolID = common.HexToHash(config.Params[0].(string))
+		if p, ok := config.Params[0].(string); ok {
+			scraper.poolID = common.HexToHash(p)
+		}
 	}
 
 	scraper.lpTokenAddress = common.HexToAddress(config.Address)

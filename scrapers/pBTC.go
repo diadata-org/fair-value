@@ -19,7 +19,6 @@ type pBTCScraper struct {
 	bitcoinRPC      string
 	blockchain      string
 	contractAddress common.Address
-	poolID          common.Hash
 	lpTokenAddress  common.Address
 	config          models.FeedConfig
 	bitcoinAPI      string
@@ -45,10 +44,6 @@ func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
 		lastBlock:       uint64(contractCreation),
 		reserveWallets:  make(map[string]struct{}),
 		chunkSize:       uint64(10000),
-	}
-
-	if len(config.Params) > 0 {
-		scraper.poolID = common.HexToHash(config.Params[0].(string))
 	}
 
 	scraper.lpTokenAddress = common.HexToAddress(config.Address)
