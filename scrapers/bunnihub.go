@@ -35,10 +35,10 @@ type BunnihubScraper struct {
 	config          models.FeedConfig
 }
 
-func NewBunnihubScraper(config models.FeedConfig) *BunnihubScraper {
+func NewBunnihubScraper(config models.FeedConfig, metacontractData models.MetacontractData) *BunnihubScraper {
 
 	scraper := BunnihubScraper{
-		BaseScraper:     NewBaseScraper(),
+		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
 		contractAddress: common.HexToAddress(config.Address),
 		config:          config,
@@ -83,20 +83,22 @@ func (scraper *BunnihubScraper) TotalUnderlying() (totalUnderlying *big.Int, tot
 	// poolState.Vault0 and poolState.Vault1 -> call "asset" on the respective vault.
 
 	// DIA Prices
-	ethPrice, err := utils.GetDiaQuotationPrice(models.ETHEREUM, "0x0000000000000000000000000000000000000000")
+	eth := models.Asset{Symbol: "ETH", Blockchain: models.ETHEREUM, Address: "0x0000000000000000000000000000000000000000"}
+	ethQuotation, err := eth.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
 	if err != nil {
-		log.Error("bunnihub -- GetDiaQuotationPrice for ETH: ", err)
+		log.Error("bunnihub -- GetPrice for ETH: ", err)
 		return
 	}
-	usdcPrice, err := utils.GetDiaQuotationPrice(models.ETHEREUM, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+	usdc := models.Asset{Symbol: "USDC", Blockchain: models.ETHEREUM, Address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"}
+	usdcQuotation, err := usdc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
 	if err != nil {
-		log.Error("bunnihub -- GetDiaQuotationPrice for USDC: ", err)
+		log.Error("bunnihub -- GetPrice for USDC: ", err)
 		return
 	}
 
 	// Scaled sum of values.
-	ethValue := new(big.Float).Mul(ethBalance, big.NewFloat(ethPrice))
-	usdcValue := new(big.Float).Mul(usdcBalance, big.NewFloat(usdcPrice))
+	ethValue := new(big.Float).Mul(ethBalance, big.NewFloat(ethQuotation.Price))
+	usdcValue := new(big.Float).Mul(usdcBalance, big.NewFloat(usdcQuotation.Price))
 	totalValue := new(big.Float).Add(ethValue, usdcValue)
 	totalValueUnderlying, _ = new(big.Float).Mul(totalValue, new(big.Float).SetFloat64(math.Pow10(int(DECIMALS)))).Int(nil)
 

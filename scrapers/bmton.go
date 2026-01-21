@@ -25,9 +25,9 @@ type BMTonScraper struct {
 	api             *ton.APIClient
 }
 
-func NewBMTonScraper(config models.FeedConfig) *BMTonScraper {
+func NewBMTonScraper(config models.FeedConfig, metacontractData models.MetacontractData) *BMTonScraper {
 	scraper := BMTonScraper{
-		BaseScraper:     NewBaseScraper(),
+		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
 		contractAddress: config.Address,
 		config:          config,

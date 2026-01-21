@@ -27,7 +27,7 @@ type pBTCScraper struct {
 	chunkSize       uint64
 }
 
-func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
+func NewpBTCScraper(config models.FeedConfig, metacontractData models.MetacontractData) *pBTCScraper {
 
 	contractCreation, err := strconv.Atoi(utils.Getenv("CONTRACT_CREATION_PBTC", "24173056"))
 	if err != nil {
@@ -35,7 +35,7 @@ func NewpBTCScraper(config models.FeedConfig) *pBTCScraper {
 		contractCreation = 24173056
 	}
 	scraper := pBTCScraper{
-		BaseScraper:     NewBaseScraper(),
+		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
 		contractAddress: common.HexToAddress(config.Address),
 		bitcoinRPC:      utils.Getenv("BITCOIN_RPC_NODE_PBTC", ""),
@@ -125,11 +125,12 @@ func (scraper *pBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, totalVa
 	totalUnderlying, _ = big.NewFloat(0).Mul(big.NewFloat(totalBalance), big.NewFloat(1e18)).Int(nil)
 
 	// Compute totalValueUnderlying.
-	priceBitcoin, err := utils.GetDiaQuotationPrice(models.BITCOIN, "0x0000000000000000000000000000000000000000")
+	btc := models.Asset{Symbol: "BTC", Blockchain: models.BITCOIN, Address: "0x0000000000000000000000000000000000000000"}
+	quoteBitcoin, err := btc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
 	if err != nil {
-		log.Error("pBTC -- GetDiaQuotationPrice: ", err)
+		log.Error("pBTC -- GetPrice: ", err)
 	}
-	totalValueUnderlying, _ = big.NewFloat(0).Mul(big.NewFloat(totalBalance*priceBitcoin), big.NewFloat(1e18)).Int(nil)
+	totalValueUnderlying, _ = big.NewFloat(0).Mul(big.NewFloat(totalBalance*quoteBitcoin.Price), big.NewFloat(1e18)).Int(nil)
 
 	return
 }

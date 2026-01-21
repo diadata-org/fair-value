@@ -3,14 +3,16 @@ package scrapers
 import "github.com/diadata-org/fair-value/models"
 
 type BaseScraper struct {
-	dataChannel  chan models.FairValueData
-	closeChannel chan bool
+	dataChannel      chan models.FairValueData
+	closeChannel     chan bool
+	metacontractData models.MetacontractData
 }
 
-func NewBaseScraper() BaseScraper {
+func NewBaseScraper(metacontractData models.MetacontractData) BaseScraper {
 	return BaseScraper{
-		dataChannel:  make(chan models.FairValueData),
-		closeChannel: make(chan bool),
+		dataChannel:      make(chan models.FairValueData),
+		closeChannel:     make(chan bool),
+		metacontractData: metacontractData,
 	}
 }
 

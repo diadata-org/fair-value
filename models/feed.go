@@ -9,6 +9,9 @@ import (
 
 const FEED_CONFIG_SEPARATOR = "-"
 
+// We have the following convention for the @Params slice:
+// Params[0]: poolID 				string
+// Params[1]: wallet addresses 		[]string
 type FeedConfig struct {
 	Symbol        string `json:"Symbol"`
 	FeedType      string `json:"Feed_Type"`

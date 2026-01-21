@@ -22,10 +22,10 @@ type hemiBTCScraper struct {
 	chunkSize       uint64
 }
 
-func NewhemiBTCScraper(config models.FeedConfig) *hemiBTCScraper {
+func NewhemiBTCScraper(config models.FeedConfig, metacontractData models.MetacontractData) *hemiBTCScraper {
 
 	scraper := hemiBTCScraper{
-		BaseScraper:     NewBaseScraper(),
+		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
 		contractAddress: common.HexToAddress(config.Address),
 		bitcoinRPC:      utils.Getenv("BITCOIN_RPC_NODE_HEMIBTC", ""),
@@ -79,11 +79,12 @@ func (scraper *hemiBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, tota
 	totalUnderlying, _ = big.NewFloat(0).Mul(big.NewFloat(totalBalance), big.NewFloat(1e18)).Int(nil)
 
 	// Compute totalValueUnderlying.
-	priceBitcoin, err := utils.GetDiaQuotationPrice(models.BITCOIN, "0x0000000000000000000000000000000000000000")
+	btc := models.Asset{Symbol: "BTC", Blockchain: models.BITCOIN, Address: "0x0000000000000000000000000000000000000000"}
+	quotationBitcoin, err := btc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
 	if err != nil {
 		log.Error("hemiBTC -- GetDiaQuotationPrice: ", err)
 	}
-	totalValueUnderlying, _ = big.NewFloat(0).Mul(big.NewFloat(totalBalance*priceBitcoin), big.NewFloat(1e18)).Int(nil)
+	totalValueUnderlying, _ = big.NewFloat(0).Mul(big.NewFloat(totalBalance*quotationBitcoin.Price), big.NewFloat(1e18)).Int(nil)
 
 	return
 }

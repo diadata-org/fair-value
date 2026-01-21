@@ -25,10 +25,10 @@ type SatusdScraper struct {
 	config          models.FeedConfig
 }
 
-func NewSatusdScraper(config models.FeedConfig) *SatusdScraper {
+func NewSatusdScraper(config models.FeedConfig, metacontractData models.MetacontractData) *SatusdScraper {
 
 	scraper := SatusdScraper{
-		BaseScraper:     NewBaseScraper(),
+		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
 		contractAddress: common.HexToAddress(config.Address),
 		config:          config,
@@ -60,12 +60,13 @@ func (scraper *SatusdScraper) TotalUnderlying() (totalUnderlying *big.Int, total
 	// TO DO: Get underlying asset from contract.
 
 	// DIA Prices
-	satusdPrice, err := utils.GetDiaQuotationPrice(models.BINANCESMARTCHAIN, "0xb4818BB69478730EF4e33Cc068dD94278e2766cB")
+	satUSD := models.Asset{Symbol: "satUSD", Blockchain: models.BINANCESMARTCHAIN, Address: "0xb4818BB69478730EF4e33Cc068dD94278e2766cB"}
+	satusdQuotation, err := satUSD.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
 	if err != nil {
-		log.Error("satUSD+ -- GetDiaQuotationPrice: ", err)
+		log.Error("satUSD+ -- GetPrice: ", err)
 	}
 	// Scaled sum of values.
-	totalValueUnderlying, _ = new(big.Float).Mul(big.NewFloat(0).SetInt(totalUnderlying), big.NewFloat(satusdPrice)).Int(nil)
+	totalValueUnderlying, _ = new(big.Float).Mul(big.NewFloat(0).SetInt(totalUnderlying), big.NewFloat(satusdQuotation.Price)).Int(nil)
 	log.Debug("satUSD+ total value underlying: ", totalValueUnderlying)
 
 	return

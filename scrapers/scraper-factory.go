@@ -15,13 +15,13 @@ import (
 
 // NewIScraper is the factory function for the basic Scraper interface.
 // @params is a set of optional parameters such as poolID for bunnihub UniV4 pools.
-func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
+func NewIScraper(cancel context.CancelFunc, config models.FeedConfig, metacontractData models.MetacontractData) IScraper {
 
 	switch config.FeedType {
 
 	case "CONTRACT_EXCHANGE_RATE":
 
-		scraper := NewIContractExchangeRate(config)
+		scraper := NewIContractExchangeRate(config, metacontractData)
 
 		// Processing of CER data for final value.
 		ticker := time.NewTicker(time.Duration(config.UpdateSeconds) * time.Second)
@@ -46,7 +46,7 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
 
 	case "NET_ASSET_VALUE":
 
-		scraper := NewINetAssetValue(config)
+		scraper := NewINetAssetValue(config, metacontractData)
 
 		// Processing of nav.Methods to final fair value.
 		ticker := time.NewTicker(time.Duration(config.UpdateSeconds) * time.Second)
@@ -77,7 +77,7 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig) IScraper {
 // SPECIFIC FAIR VALUE SCRAPER FACTORIES
 // ---------------------------------------------------------------------------------
 
-func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
+func NewIContractExchangeRate(config models.FeedConfig, metacontractData models.MetacontractData) IContractExchangeRate {
 
 	symbol := config.Symbol
 	log.Infof("start %s scraper.", symbol)
@@ -85,40 +85,40 @@ func NewIContractExchangeRate(config models.FeedConfig) IContractExchangeRate {
 	switch symbol {
 
 	case "pBTC":
-		cer := NewpBTCScraper(config)
+		cer := NewpBTCScraper(config, metacontractData)
 		return cer
 
 	case "hemiBTC":
-		cer := NewhemiBTCScraper(config)
+		cer := NewhemiBTCScraper(config, metacontractData)
 		return cer
 
 	case "USDp":
-		cer := NewUSDPScraperScraper(config)
+		cer := NewUSDPScraperScraper(config, metacontractData)
 		return cer
 
 	case "bmTON":
-		cer := NewBMTonScraper(config)
+		cer := NewBMTonScraper(config, metacontractData)
 		return cer
 
 	case "satUSD+":
-		cer := NewSatusdScraper(config)
+		cer := NewSatusdScraper(config, metacontractData)
 		return cer
 
 	case "hOHM":
-		cer := NewBunnihubScraper(config)
+		cer := NewBunnihubScraper(config, metacontractData)
 		return cer
 	}
 
 	return nil
 }
 
-func NewINetAssetValue(config models.FeedConfig) INetAssetValue {
+func NewINetAssetValue(config models.FeedConfig, metacontractData models.MetacontractData) INetAssetValue {
 	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
 	log.Infof("start %s scraper.", config.Symbol)
 
 	switch asset {
 	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x1db1591540d7a6062be0837ca3c808add28844f6"}:
-		nav := NewHohmScraper(config)
+		nav := NewHohmScraper(config, metacontractData)
 		return nav
 	}
 

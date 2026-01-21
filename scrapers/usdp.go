@@ -31,9 +31,9 @@ type USDPScraper struct {
 	config          models.FeedConfig
 }
 
-func NewUSDPScraperScraper(config models.FeedConfig) *USDPScraper {
+func NewUSDPScraperScraper(config models.FeedConfig, metacontractData models.MetacontractData) *USDPScraper {
 	scraper := USDPScraper{
-		BaseScraper:     NewBaseScraper(),
+		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
 		contractAddress: config.Address,
 		config:          config,

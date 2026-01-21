@@ -13,6 +13,7 @@ import (
 	"github.com/diadata-org/fair-value/onchain"
 	"github.com/diadata-org/fair-value/scrapers"
 	"github.com/diadata-org/fair-value/utils"
+	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -60,6 +61,18 @@ func main() {
 		log.Fatalf("Failed to Deploy or Bind primary and backup contract: %v", err)
 	}
 
+	var metacontractData models.MetacontractData
+	metacontractData.Address = common.HexToAddress(utils.Getenv("METACONTRACT_ADDRESS", ""))
+	metacontractData.Precision, err = strconv.Atoi(utils.Getenv("METACONTRACT_PRECISION", ""))
+	if err != nil {
+		log.Error("parse METACONTRACT_PRECISION: ", err)
+		metacontractData.Precision = 8
+	}
+	metacontractData.Client, err = utils.MakeEthClient(utils.Getenv("METACONTRACT_NODE", ""), utils.Getenv("METACONTRACT_NODE", ""))
+	if err != nil {
+		log.Fatalf("MakeEthClient for metacontract connection: %v", err)
+	}
+
 	// Start collecting and pushing metrics.
 	metrics.StartMetrics(
 		conn,
@@ -100,7 +113,7 @@ func main() {
 	allIscrapers := make(map[string]scrapers.IScraper)
 	for _, config := range feedConfigs {
 		ctx, cancel := context.WithCancel(context.Background())
-		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config)
+		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config, metacontractData)
 		wg.Add(1)
 		go handleData(ctx, allIscrapers[config.FeedConfigIdentifier()], &wg, collectorChannel)
 	}
@@ -139,7 +152,7 @@ func main() {
 			// Add scraper for added configs.
 			for _, config := range plus {
 				ctx, cancel := context.WithCancel(context.Background())
-				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config)
+				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config, metacontractData)
 				wg.Add(1)
 				go handleData(ctx, allIscrapers[config.FeedConfigIdentifier()], &wg, collectorChannel)
 			}
