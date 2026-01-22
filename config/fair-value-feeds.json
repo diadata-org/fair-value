@@ -7,6 +7,14 @@
             "Blockchain": "Ethereum",
             "Update_Seconds": 240,
             "Params": ["", []]
-        }       
+        },
+        {
+            "Symbol": "hemiBTC",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0xAA40c0c7644e0b2B224509571e10ad20d9C4ef28",
+            "Blockchain": "Hemi",
+            "Update_Seconds": 240,
+            "Params": ["", ["1GawhMSUVu3bgRiNmejbVTBjpwBygGWSqf","16NuSCxDVCAXbKs9GRbjbHXbwGXu3tnPSo","bc1q4lpa9d5zxehge7vx86784gcxy23hc3xwp3gl422venswe6pvhh5qpn9xfj"]]
+        }
     ]
 }
