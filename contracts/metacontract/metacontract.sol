@@ -127,21 +127,23 @@ contract ValueStoreMetaAggregator {
 
         for (uint256 i = 0; i < numValueStores; ++i) {
             IValueStore store = IValueStore(valueStores[i]);
-            (
+            try store.getValue(key) returns (
                 uint256 fairV,
                 uint256 usdV,
                 uint256 num,
                 uint256 den,
                 uint256 ts
-            ) = store.getValue(key);
+            ) {
+                if (ts + timeoutSeconds < block.timestamp) continue;
 
-            if (ts + timeoutSeconds < block.timestamp) continue;
-
-            fairValues[count] = fairV;
-            usdValues[count] = usdV;
-            nums[count] = num;
-            dens[count] = den;
-            count++;
+                fairValues[count] = fairV;
+                usdValues[count] = usdV;
+                nums[count] = num;
+                dens[count] = den;
+                count++;
+            } catch {
+                continue;
+            }
         }
 
         if (count < threshold) revert ThresholdNotMet(count, threshold);
