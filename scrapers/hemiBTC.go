@@ -96,6 +96,9 @@ func (scraper *hemiBTCScraper) TotalShares() (totalShares *big.Int, err error) {
 	}
 	// Total shares are with 8 decimals and have to be normalized to 18.
 	totalShares, err = hemibtcCaller.TotalSupply(&bind.CallOpts{})
+	if err != nil {
+		return
+	}
 	totalShares, _ = big.NewFloat(0).Mul(big.NewFloat(0).SetInt(totalShares), big.NewFloat(1e10)).Int(nil)
 	return
 }
