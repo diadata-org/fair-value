@@ -57,7 +57,7 @@ jobs:
         run: |
           docker build -f build/Dockerfile -t ${ECR_REGISTRY}/lumina/fair-value:${IMAGE_TAG} .
           docker push ${ECR_REGISTRY}/lumina/fair-value:${IMAGE_TAG}
-          echo "✅ Pushed image to AWS ECR:"
+          echo "Pushed image to AWS ECR:"
           echo "  ${ECR_REGISTRY}/lumina/fair-value:${IMAGE_TAG}"
 
       - name: Update AWS testnet feeder values and push to lumina-infra
@@ -88,9 +88,9 @@ jobs:
             git add helmcharts/fair-value-feeders-aws/*/values.yaml
             git commit -m "PR #${{ github.event.pull_request.number }}: Update fair-value feeders to commit-hash-${{ env.COMMIT_HASH }}"
             git push https://$LUMINA_INFRA_PAT@github.com/diadata-org/lumina-infra.git HEAD:master
-            echo "✅ Pushed updates to lumina-infra. ArgoCD will sync fair-value feeders automatically."
+            echo "Pushed updates to lumina-infra. ArgoCD will sync fair-value feeders automatically."
           else
-            echo "ℹ️  No changes to commit"
+            echo "No changes to commit"
           fi
 
           cd ..
