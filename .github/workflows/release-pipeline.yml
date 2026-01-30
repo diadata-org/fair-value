@@ -67,8 +67,49 @@ jobs:
             ${ECR_REGISTRY}/lumina/fair-value:${{ env.RELEASE_TAG }}
           docker push ${ECR_REGISTRY}/lumina/fair-value:${{ env.RELEASE_TAG }}
 
-          echo "✅ Pushed image to AWS ECR:"
+          echo "Pushed image to AWS ECR:"
           echo "  ${ECR_REGISTRY}/lumina/fair-value:${{ env.RELEASE_TAG }}"
+
+      - name: Checkout lumina-infra repository
+        env:
+          LUMINA_INFRA_PAT: ${{ secrets.LUMINA_INFRA_PAT }}
+        run: |
+          rm -rf lumina-infra
+          git clone -q https://$LUMINA_INFRA_PAT@github.com/diadata-org/lumina-infra lumina-infra
+
+      - name: Update mainnet feeder values
+        env:
+          LUMINA_INFRA_PAT: ${{ secrets.LUMINA_INFRA_PAT }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          cd lumina-infra
+
+          git config user.name "DIA Lumina Bot"
+          git config user.email "infrastructure@diadata.org"
+
+          FEEDERS="306-fair-value-feeder-mainnet-aws 307-fair-value-feeder-mainnet-aws"
+          for feeder in $FEEDERS; do
+            VALUES_FILE="helmcharts/fair-value-feeders-aws/${feeder}/values.yaml"
+            if [ -f "$VALUES_FILE" ]; then
+              echo "Updating $VALUES_FILE"
+              sed -i "s|image: [^,]*|image: ${ECR_REGISTRY}/lumina/fair-value|" "$VALUES_FILE"
+              sed -i "s|tag: [^}]*|tag: ${{ env.RELEASE_TAG }}|" "$VALUES_FILE"
+            fi
+          done
+
+          echo "Changes to be committed:"
+          git diff helmcharts/fair-value-feeders-aws/*/values.yaml
+
+          if ! git diff --quiet; then
+            git add helmcharts/fair-value-feeders-aws/*/values.yaml
+            git commit -m "Release ${{ env.RELEASE_TAG }}: Update mainnet fair-value feeders"
+            git push https://$LUMINA_INFRA_PAT@github.com/diadata-org/lumina-infra.git HEAD:master
+            echo "Pushed updates to lumina-infra. ArgoCD will sync mainnet feeders automatically."
+          else
+            echo "No changes to commit"
+          fi
+
+          cd ..
 
       # Set up Docker Buildx for multi-arch builds
       - name: Set up Docker Buildx
@@ -105,5 +146,6 @@ jobs:
       # Logout and cleanup
       - name: Logout and cleanup
         run: |
+          rm -rf lumina-infra
           docker logout
           ibmcloud logout
