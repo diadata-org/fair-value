@@ -10,12 +10,19 @@ import (
 
 // GetRequest performs a get request on @url and returns the response body
 // as a slice of byte data.
-func GetRequest(url string) ([]byte, int, error) {
+func GetRequest(url string, requestHeaders map[string]string) ([]byte, int, error) {
+	client := &http.Client{}
 
-	response, err := http.Get(url) //nolint:noctx,gosec
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Error("get request: ", err)
-		return []byte{}, 0, err
+		return nil, 0, err
+	}
+	for name, value := range requestHeaders {
+		req.Header.Set(name, value)
+	}
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	// Close response body after function

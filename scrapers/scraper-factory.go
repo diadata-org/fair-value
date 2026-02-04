@@ -107,6 +107,14 @@ func NewIContractExchangeRate(config models.FeedConfig, metacontractData models.
 	case "hOHM":
 		cer := NewBunnihubScraper(config, metacontractData)
 		return cer
+
+	case "stroom":
+		cer := NewStroomScraper(config, metacontractData)
+		return cer
+
+	case "USDr":
+		cer := NewUSDRScraperScraper(config, metacontractData)
+		return cer
 	}
 
 	return nil

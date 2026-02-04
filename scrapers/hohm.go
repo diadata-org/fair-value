@@ -17,10 +17,6 @@ import (
 // NET ASSET VALUE
 // ------------------------------------------------------------------
 
-// const (
-// 	HOHM_ADDRESS = "0x1db1591540d7a6062be0837ca3c808add28844f6"
-// )
-
 type HohmScraper struct {
 	BaseScraper
 	blockchain      string
@@ -63,9 +59,9 @@ func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err e
 
 	assetValueUSD = new(big.Int)
 	for i, token := range tokens.Assets {
-		// log.Infof("hOHM -- asset address: %s", token.Hex())
+		// log.Infof("%d - hOHM -- asset address: %s", i, token.Hex())
 		supply := balances.TotalAssets[i]
-		// TO DO: Get token.Symbol somehow, as we need this for querying the metacontract.
+		// TO DO: Get token.Symbol in order to query from the metacontract.
 		asset := models.Asset{Blockchain: models.ETHEREUM, Address: token.Hex()}
 		quotation, errGetPrice := asset.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
 		if errGetPrice != nil {
@@ -113,7 +109,7 @@ func (scraper *HohmScraper) Liabilities() (liabilitiesValueUSD *big.Int, native 
 			log.Errorf("hOHM -- failed to fetch price for %s: %v", token.Hex(), err)
 			return
 		}
-		// log.Infof("hOHM -- assets supply -- price: %s -- %v", supply.String(), price)
+		log.Debugf("hOHM -- assets supply -- price: %s -- %v", supply.String(), quotation.Price)
 
 		// Scale price and supply to big.Float.
 		priceBig := big.NewFloat(0).Mul(big.NewFloat(quotation.Price), new(big.Float).SetFloat64(math.Pow10(int(DECIMALS))))

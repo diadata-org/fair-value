@@ -87,7 +87,7 @@ func (a *Asset) GetPriceFromDiaAPI() (aq AssetQuotation, err error) {
 	baseString := "https://api.diadata.org/v1/assetQuotation/" + a.Blockchain + "/" + a.Address
 
 	var response []byte
-	response, _, err = utils.GetRequest(baseString)
+	response, _, err = utils.GetRequest(baseString, map[string]string{})
 	if err != nil {
 		return
 	}

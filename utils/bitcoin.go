@@ -99,7 +99,7 @@ func GetBitcoinWalletBalanceAnkr(wallet string) (balance float64, err error) {
 		Getenv("ANKR_BITCOIN_API_KEY", "") +
 		"/api/v2/address/" + wallet
 
-	data, _, err := GetRequest(url)
+	data, _, err := GetRequest(url, map[string]string{})
 	if err != nil {
 		return
 	}
@@ -122,7 +122,7 @@ func GetBitcoinWalletBalanceAnkr(wallet string) (balance float64, err error) {
 func GetBitcoinWalletBalanceMempool(wallet string) (balance float64, err error) {
 	url := MEMPOOL_BASE_URL + "address/" + wallet
 
-	data, _, err := GetRequest(url)
+	data, _, err := GetRequest(url, map[string]string{})
 	if err != nil {
 		return
 	}
