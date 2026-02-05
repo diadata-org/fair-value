@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.29;
+pragma solidity 0.8.20;
 
 interface IValueStore {
     function getValue(
@@ -131,20 +131,43 @@ contract DIAOracleV3MetaFairValueField {
 
         if (count < threshold) revert ThresholdNotMet(count, threshold);
 
-        uint256 last = count - 1;
-        fairValues.sort(0, last);
-        usdValues.sort(0, last);
-        nums.sort(0, last);
-        dens.sort(0, last);
+        // Only sort if we have valid data
+        if (count > 0) {
+            uint256 last = count - 1;
+            fairValues.sort(0, last);
+            usdValues.sort(0, last);
+            nums.sort(0, last);
+            dens.sort(0, last);
+        }
 
-        uint256 mid = count / 2; // TODO: test what happens with even count
+        // Calculate true median
+        uint256 fairValue;
+        uint256 usdValue;
+        uint256 numerator;
+        uint256 denominator;
+
+        // odd
+        if (count % 2 == 1) {
+             uint256 mid = count / 2;
+            fairValue = fairValues[mid];
+            usdValue = usdValues[mid];
+            numerator = nums[mid];
+            denominator = dens[mid];
+        } else {
+            uint256 mid1 = (count / 2) - 1;
+            uint256 mid2 = count / 2;
+            fairValue = (fairValues[mid1] + fairValues[mid2]) / 2;
+            usdValue = (usdValues[mid1] + usdValues[mid2]) / 2;
+            numerator = (nums[mid1] + nums[mid2]) / 2;
+            denominator = (dens[mid1] + dens[mid2]) / 2;
+        }
 
         return
             MedianSet({
-                fairValue: fairValues[mid],
-                usdValue: usdValues[mid],
-                numerator: nums[mid],
-                denominator: dens[mid],
+                fairValue: fairValue,
+                usdValue: usdValue,
+                numerator: numerator,
+                denominator: denominator,
                 timestamp: block.timestamp
             });
     }
