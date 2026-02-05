@@ -76,7 +76,7 @@ struct TestCase {
 
     string constant TEST_KEY = "BTC/USD";
 
-    function setUp() public {
+    function setUp() public virtual {
         vm.prank(owner);
         oracle = new DIAOracleV3MetaFairValueField(owner);
     }
@@ -621,5 +621,291 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
                 runTestCase(testCases[i]);
             }
         }
+    }
+}
+
+ 
+contract AdminFunctionsTest is BaseTest {
+    function test_ConstructorWithZeroAddress() public {
+        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ZeroAddress.selector));
+        new DIAOracleV3MetaFairValueField(address(0));
+    }
+
+    function test_ConstructorWithValidOwner() public {
+        DIAOracleV3MetaFairValueField newOracle = new DIAOracleV3MetaFairValueField(owner);
+        assertEq(newOracle.owner(), owner);
+    }
+
+    function test_TransferOwnership() public {
+        address newOwner = address(0x3);
+
+        vm.prank(owner);
+        oracle.transferOwnership(newOwner);
+
+        assertEq(oracle.owner(), newOwner);
+    }
+
+    function test_TransferOwnershipToZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ZeroAddress.selector));
+        oracle.transferOwnership(address(0));
+    }
+
+    function test_TransferOwnershipNotOwner() public {
+        vm.prank(user);
+        vm.expectRevert("not owner");
+        oracle.transferOwnership(address(0x3));
+    }
+
+    function test_AddValueStore() public {
+        MockValueStore store = new MockValueStore();
+
+        vm.prank(owner);
+        oracle.addValueStore(address(store));
+
+        assertEq(oracle.numValueStores(), 1);
+        assertEq(oracle.valueStores(0), address(store));
+    }
+
+    function test_AddValueStoreZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ZeroAddress.selector));
+        oracle.addValueStore(address(0));
+    }
+
+    function test_AddDuplicateValueStore() public {
+        MockValueStore store = new MockValueStore();
+
+        vm.prank(owner);
+        oracle.addValueStore(address(store));
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.OracleExists.selector));
+        oracle.addValueStore(address(store));
+    }
+
+    function test_AddValueStoreNotOwner() public {
+        MockValueStore store = new MockValueStore();
+
+        vm.prank(user);
+        vm.expectRevert("not owner");
+        oracle.addValueStore(address(store));
+    }
+
+    function test_RemoveValueStore() public {
+        MockValueStore store = new MockValueStore();
+
+        vm.prank(owner);
+        oracle.addValueStore(address(store));
+
+        assertEq(oracle.numValueStores(), 1);
+
+        vm.prank(owner);
+        oracle.removeValueStore(address(store));
+
+        assertEq(oracle.numValueStores(), 0);
+    }
+
+    function test_RemoveValueStoreNotFound() public {
+        MockValueStore store = new MockValueStore();
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.OracleNotFound.selector));
+        oracle.removeValueStore(address(store));
+    }
+
+    function test_RemoveValueStoreNotOwner() public {
+        MockValueStore store = new MockValueStore();
+
+        vm.prank(user);
+        vm.expectRevert("not owner");
+        oracle.removeValueStore(address(store));
+    }
+
+    function test_RemoveMiddleValueStore() public {
+        // Add 3 stores
+        MockValueStore store1 = new MockValueStore();
+        MockValueStore store2 = new MockValueStore();
+        MockValueStore store3 = new MockValueStore();
+
+        vm.prank(owner);
+        oracle.addValueStore(address(store1));
+        vm.prank(owner);
+        oracle.addValueStore(address(store2));
+        vm.prank(owner);
+        oracle.addValueStore(address(store3));
+
+        assertEq(oracle.numValueStores(), 3);
+
+        // Remove middle store
+        vm.prank(owner);
+        oracle.removeValueStore(address(store2));
+
+        assertEq(oracle.numValueStores(), 2);
+        // Store1 should still be at index 0
+        assertEq(oracle.valueStores(0), address(store1));
+        // Store3 should now be at index 1 (moved from index 2)
+        assertEq(oracle.valueStores(1), address(store3));
+    }
+
+    function test_SetThreshold() public {
+        vm.prank(owner);
+        oracle.setThreshold(5);
+
+        assertEq(oracle.threshold(), 5);
+    }
+
+    function test_SetThresholdNotOwner() public {
+        vm.prank(user);
+        vm.expectRevert("not owner");
+        oracle.setThreshold(5);
+    }
+
+    function test_SetTimeoutSeconds() public {
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(7200);
+
+        assertEq(oracle.timeoutSeconds(), 7200);
+    }
+
+    function test_SetTimeoutSecondsNotOwner() public {
+        vm.prank(user);
+        vm.expectRevert("not owner");
+        oracle.setTimeoutSeconds(7200);
+    }
+}
+
+ 
+contract GetValueTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        // Initialize threshold and timeout for getValue tests
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_GetValueWithFairKey() public {
+        // Setup stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, "BTC", 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 2, 1, timestamp);
+        setStoreValues(store3, "BTC", 300, 3000, 3, 1, timestamp);
+
+        // Test getValue with "fairValue:BTC" key
+        (uint128 value, uint128 ts) = oracle.getValue("fairValue:BTC");
+
+        assertEq(uint256(value), 200); // Median fairValue
+        assertEq(uint256(ts), block.timestamp);
+    }
+
+    function test_GetValueWithUsdKey() public {
+        // Setup stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, "BTC", 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 2, 1, timestamp);
+        setStoreValues(store3, "BTC", 300, 3000, 3, 1, timestamp);
+
+        // Test getValue with "usdValue:BTC" key
+        (uint128 value, uint128 ts) = oracle.getValue("usdValue:BTC");
+
+        assertEq(uint256(value), 2000); // Median usdValue
+        assertEq(uint256(ts), block.timestamp);
+    }
+
+    function test_GetValueWithNumeratorKey() public {
+        // Setup stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, "BTC", 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 2, 1, timestamp);
+        setStoreValues(store3, "BTC", 300, 3000, 3, 1, timestamp);
+
+        // Test getValue with "numerator:BTC" key
+        (uint128 value, uint128 ts) = oracle.getValue("numerator:BTC");
+
+        assertEq(uint256(value), 2); // Median numerator
+        assertEq(uint256(ts), block.timestamp);
+    }
+
+    function test_GetValueWithDenominatorKey() public {
+        // Setup stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, "BTC", 100, 1000, 1, 2, timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 2, 3, timestamp);
+        setStoreValues(store3, "BTC", 300, 3000, 3, 4, timestamp);
+
+        // Test getValue with "denominator:BTC" key
+        (uint128 value, uint128 ts) = oracle.getValue("denominator:BTC");
+
+        assertEq(uint256(value), 3); // Median denominator
+        assertEq(uint256(ts), block.timestamp);
+    }
+
+    function test_GetValueWithInvalidKey() public view {
+        // Test with key that has no colon
+        (uint128 value, uint128 ts) = oracle.getValue("InvalidKey");
+
+        assertEq(uint256(value), 0);
+        assertEq(uint256(ts), 0);
+    }
+
+    function test_GetValueWithUnknownAction() public {
+        // Setup stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        setStoreValues(store1, "BTC", 100, 1000, 1, 1, block.timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 2, 1, block.timestamp);
+
+        // Test getValue with unknown action - should return fairValue as default
+        (uint128 value, uint128 ts) = oracle.getValue("unknownAction:BTC");
+
+        assertEq(uint256(value), 150); // Default to fairValue (median of 100 and 200)
+        assertEq(uint256(ts), block.timestamp);
+    }
+
+    function test_GetValueWithKeyStartingWithColon() public {
+        // Test with key that starts with colon - no action before colon
+        // First add stores with data
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        setStoreValues(store1, "BTC", 100, 1000, 1, 1, block.timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 2, 1, block.timestamp);
+
+        // actionHash will be keccak256("") which is not bytes32(0), but it won't match any known action
+        // So it defaults to fairValue
+        (uint128 value, uint128 ts) = oracle.getValue(":BTC");
+        assertEq(uint256(value), 150); // Median
+    }
+
+    function test_GetValueWithMultipleColons() public {
+        // Setup stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        setStoreValues(store1, "BTC:USD", 100, 1000, 1, 1, block.timestamp);
+        setStoreValues(store2, "BTC:USD", 200, 2000, 2, 1, block.timestamp);
+
+        // Test with key containing multiple colons
+        // Should parse "fairValue" as action and "BTC:USD" as asset
+        (uint128 value, uint128 ts) = oracle.getValue("fairValue:BTC:USD");
+
+        assertEq(uint256(value), 150); // Median of 100 and 200
+        assertEq(uint256(ts), block.timestamp);
     }
 }
