@@ -104,9 +104,9 @@ func NewIContractExchangeRate(config models.FeedConfig, metacontractData models.
 		cer := NewSatusdScraper(config, metacontractData)
 		return cer
 
-	case "hOHM":
-		cer := NewBunnihubScraper(config, metacontractData)
-		return cer
+	// case "hOHM":
+	// cer := NewBunnihubScraper(config, metacontractData)
+	// return cer
 
 	case "stroom":
 		cer := NewStroomScraper(config, metacontractData)
@@ -121,11 +121,11 @@ func NewIContractExchangeRate(config models.FeedConfig, metacontractData models.
 }
 
 func NewINetAssetValue(config models.FeedConfig, metacontractData models.MetacontractData) INetAssetValue {
-	asset := models.Asset{Blockchain: config.Blockchain, Address: config.Address}
-	log.Infof("start %s scraper.", config.Symbol)
+	symbol := config.Symbol
+	log.Infof("start %s scraper.", symbol)
 
-	switch asset {
-	case models.Asset{Blockchain: models.ETHEREUM, Address: "0x1db1591540d7a6062be0837ca3c808add28844f6"}:
+	switch symbol {
+	case "hOHM":
 		nav := NewHohmScraper(config, metacontractData)
 		return nav
 	}
