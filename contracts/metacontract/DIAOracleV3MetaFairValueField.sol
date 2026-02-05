@@ -30,7 +30,7 @@ library QuickSort {
     }
 }
 
-contract ValueStoreMetaAggregator {
+contract DIAOracleV3MetaFairValueField {
     using QuickSort for uint256[];
 
     struct MedianSet {
