@@ -167,7 +167,7 @@ func (scraper *pBTCScraper) getReserveWallets() (err error) {
 	if err != nil {
 		return
 	}
-	log.Debugf("pBTC -- startBlock -- currentBlock: %v -- %v ", scraper.lastBlock, currentBlockNumber)
+	log.Tracef("pBTC -- startBlock -- currentBlock: %v -- %v ", scraper.lastBlock, currentBlockNumber)
 	startblock := scraper.lastBlock
 	endblock := scraper.lastBlock + scraper.chunkSize
 
@@ -179,7 +179,7 @@ func (scraper *pBTCScraper) getReserveWallets() (err error) {
 		if currentBlockNumber > endblock {
 			log.Tracef("pBTC -- blocks left: %v", currentBlockNumber-endblock)
 		}
-		log.Debugf("pBTC -- filter custodian wallets from block %v to %v", startblock, endblock)
+		log.Tracef("pBTC -- filter custodian wallets from block %v to %v", startblock, endblock)
 		setDepositAddress, err := pbtcFilterer.FilterCustodianBtcDepositAddressSet(
 			&bind.FilterOpts{
 				Start: startblock,
