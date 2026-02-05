@@ -1,6 +1,22 @@
 {
     "Feeds": [
         {
+            "Symbol": "stroom",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "",
+            "Blockchain": "",
+            "Update_Seconds": 20,
+            "Params": ["", ["0xDde3817ff43dC329f0D3C97D1EbC563C599a431a","0xa9eE80FfBA18a8de0F86D238cA1378e1a9120572","0x25A25Bda8454982247DF684A0287Fbbec12dC79D","0x1304774BBFB206F54294F6aFC5A876601219753D","0x3522914575ce98Fb394404dd4bD407C5c6bca771"]]
+        },
+        {
+            "Symbol": "USDr",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0x32fFe7A0A14F95373bd720Be210AA6C2E94eFCEA",
+            "Blockchain": "Sei",
+            "Update_Seconds": 20,
+            "Params": ["", ["Sei-0x32fFe7A0A14F95373bd720Be210AA6C2E94eFCEA"]]
+        },
+        {
             "Symbol": "pBTC",
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
             "Address": "0x427Bb443F2fDa1EF25e261f007662ecab54644Ac",
@@ -15,6 +31,13 @@
             "Blockchain": "Hemi",
             "Update_Seconds": 240,
             "Params": ["", ["1GawhMSUVu3bgRiNmejbVTBjpwBygGWSqf","16NuSCxDVCAXbKs9GRbjbHXbwGXu3tnPSo","bc1q4lpa9d5zxehge7vx86784gcxy23hc3xwp3gl422venswe6pvhh5qpn9xfj"]]
-        } 
+        },
+        {
+            "Symbol": "hOHM",
+            "Feed_Type": "NET_ASSET_VALUE",
+            "Address": "0x1db1591540d7a6062be0837ca3c808add28844f6",
+            "Blockchain": "Ethereum",
+            "Update_Seconds": 300
+        }
     ]
 }
