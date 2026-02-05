@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 /// @title ValueStore
 /// @notice Stores fairValue, valueUsd, numerator, denominator per string key, only owner can update
 contract ValueStore {
-
     // --- Ownable pattern (like in the DIA contract) ---
     address public owner;
 
@@ -29,11 +28,11 @@ contract ValueStore {
     // --- Value storage ---
 
     struct StoredValue {
-        uint256 fairValue;      
-        uint256 valueUsd;       
+        uint256 fairValue;
+        uint256 valueUsd;
         uint256 numerator;
         uint256 denominator;
-        uint256 timestamp;      
+        uint256 timestamp;
     }
 
     mapping(string => StoredValue) private data;
@@ -66,14 +65,7 @@ contract ValueStore {
             timestamp: block.timestamp
         });
 
-        emit ValueUpdated(
-            key,
-            fairValue,
-            valueUsd,
-            numerator,
-            denominator,
-            block.timestamp
-        );
+        emit ValueUpdated(key, fairValue, valueUsd, numerator, denominator, block.timestamp);
     }
 
     //  TO DO: Should we add timestamps as input var?
@@ -87,9 +79,9 @@ contract ValueStore {
     ) external onlyOwner {
         require(
             keys.length == fairValues.length &&
-            keys.length == valueUsds.length &&
-            keys.length == numerators.length &&
-            keys.length == denominators.length,
+                keys.length == valueUsds.length &&
+                keys.length == numerators.length &&
+                keys.length == denominators.length,
             "Array lengths must match"
         );
 
@@ -104,37 +96,20 @@ contract ValueStore {
                 timestamp: block.timestamp
             });
 
-            emit ValueUpdated(
-                keys[i],
-                fairValues[i],
-                valueUsds[i],
-                numerators[i],
-                denominators[i],
-                block.timestamp
-            );
+            emit ValueUpdated(keys[i], fairValues[i], valueUsds[i], numerators[i], denominators[i], block.timestamp);
         }
     }
 
     /// @notice Get the stored values for a given key
-    function getValue(string calldata key)
+    function getValue(
+        string calldata key
+    )
         external
         view
-        returns (
-            uint256 fairValue,
-            uint256 valueUsd,
-            uint256 numerator,
-            uint256 denominator,
-            uint256 timestamp
-        )
+        returns (uint256 fairValue, uint256 valueUsd, uint256 numerator, uint256 denominator, uint256 timestamp)
     {
         StoredValue storage sv = data[key];
         require(sv.timestamp != 0, "No data for key");
-        return (
-            sv.fairValue,
-            sv.valueUsd,
-            sv.numerator,
-            sv.denominator,
-            sv.timestamp
-        );
+        return (sv.fairValue, sv.valueUsd, sv.numerator, sv.denominator, sv.timestamp);
     }
 }

@@ -7,21 +7,11 @@ interface IValueStore {
     )
         external
         view
-        returns (
-            uint256 fairValue,
-            uint256 usdValue,
-            uint256 numerator,
-            uint256 denominator,
-            uint256 timestamp
-        );
+        returns (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp);
 }
 
 library QuickSort {
-    function sort(
-        uint256[] memory arr,
-        uint256 left,
-        uint256 right
-    ) internal pure {
+    function sort(uint256[] memory arr, uint256 left, uint256 right) internal pure {
         if (left >= right) return;
         uint256 i = left;
         uint256 j = right;
@@ -75,6 +65,7 @@ contract ValueStoreMetaAggregator {
     }
 
     constructor(address _owner) {
+        if (_owner == address(0)) revert ZeroAddress();
         owner = _owner;
     }
 
@@ -113,9 +104,7 @@ contract ValueStoreMetaAggregator {
         timeoutSeconds = newTimeout;
     }
 
-    function getMedianValues(
-        string memory key
-    ) external view returns (MedianSet memory) {
+    function getMedianValues(string memory key) external view returns (MedianSet memory) {
         if (threshold == 0) revert InvalidThreshold(threshold);
         if (timeoutSeconds == 0) revert InvalidTimeout(timeoutSeconds);
 
@@ -127,13 +116,7 @@ contract ValueStoreMetaAggregator {
 
         for (uint256 i = 0; i < numValueStores; ++i) {
             IValueStore store = IValueStore(valueStores[i]);
-            try store.getValue(key) returns (
-                uint256 fairV,
-                uint256 usdV,
-                uint256 num,
-                uint256 den,
-                uint256 ts
-            ) {
+            try store.getValue(key) returns (uint256 fairV, uint256 usdV, uint256 num, uint256 den, uint256 ts) {
                 if (ts + timeoutSeconds < block.timestamp) continue;
 
                 fairValues[count] = fairV;
@@ -154,7 +137,7 @@ contract ValueStoreMetaAggregator {
         nums.sort(0, last);
         dens.sort(0, last);
 
-        uint256 mid = count / 2;
+        uint256 mid = count / 2; // TODO: test what happens with even count
 
         return
             MedianSet({
@@ -166,9 +149,7 @@ contract ValueStoreMetaAggregator {
             });
     }
 
-    function _parseKey(
-        string memory key
-    ) internal pure returns (bytes32 actionHash, string memory assetKey) {
+    function _parseKey(string memory key) internal pure returns (bytes32 actionHash, string memory assetKey) {
         bytes memory keyBytes = bytes(key);
         uint256 len = keyBytes.length;
 
@@ -199,9 +180,7 @@ contract ValueStoreMetaAggregator {
         assetKey = string(assetBytes);
     }
 
-    function getValue(
-        string memory key
-    ) external view returns (uint128, uint128) {
+    function getValue(string memory key) external view returns (uint128, uint128) {
         (bytes32 actionHash, string memory assetKey) = _parseKey(key);
 
         if (actionHash == bytes32(0)) {
