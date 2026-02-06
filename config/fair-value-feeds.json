@@ -38,6 +38,14 @@
             "Address": "0x1db1591540d7a6062be0837ca3c808add28844f6",
             "Blockchain": "Ethereum",
             "Update_Seconds": 300
+        },
+        {
+            "Symbol": "USDp",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0x6efeDDF9269c3683Ba516cb0e2124FE335F262a2",
+            "Blockchain": "Ethereum",
+            "Update_Seconds": 60,
+            "Params": []
         }
     ]
 }
