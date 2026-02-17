@@ -131,45 +131,60 @@ contract DIAOracleV3MetaFairValueField {
 
         if (count < threshold) revert ThresholdNotMet(count, threshold);
 
-        // Only sort if we have valid data
-        if (count > 0) {
-            uint256 last = count - 1;
-            fairValues.sort(0, last);
-            usdValues.sort(0, last);
-            nums.sort(0, last);
-            dens.sort(0, last);
+        // Calculate sum of fairValues in-range
+        uint256 fairSum = 0;
+        for (uint256 i = 0; i < count; i++) {
+            fairSum += fairValues[i];
         }
 
-        // Calculate true median
-        uint256 fairValue;
-        uint256 usdValue;
-        uint256 numerator;
-        uint256 denominator;
-
-        // odd
-        if (count % 2 == 1) {
-             uint256 mid = count / 2;
-            fairValue = fairValues[mid];
-            usdValue = usdValues[mid];
-            numerator = nums[mid];
-            denominator = dens[mid];
+        // Sort all arrays according to main reference
+        if (fairSum != 0) {
+            sortMultipleByReference(fairValues, usdValues, nums, dens, count);
         } else {
-            uint256 mid1 = (count / 2) - 1;
-            uint256 mid2 = count / 2;
-            fairValue = (fairValues[mid1] + fairValues[mid2]) / 2;
-            usdValue = (usdValues[mid1] + usdValues[mid2]) / 2;
-            numerator = (nums[mid1] + nums[mid2]) / 2;
-            denominator = (dens[mid1] + dens[mid2]) / 2;
+            sortMultipleByReference(usdValues, fairValues, nums, dens, count);
         }
+
+        uint256 mid = count / 2; // TODO: test what happens with even count
 
         return
             MedianSet({
-                fairValue: fairValue,
-                usdValue: usdValue,
-                numerator: numerator,
-                denominator: denominator,
+                fairValue: fairValues[mid],
+                usdValue: usdValues[mid],
+                numerator: nums[mid],
+                denominator: dens[mid],
                 timestamp: block.timestamp
             });
+    }
+
+    /**
+    * @dev Sort main[] ascending and reorder also arrays a[], b[], c[] in the same way.
+    */
+    function sortMultipleByReference(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256 len
+    ) internal pure {
+        // Simple insertion sort for smaller arrays ~10-20, more gas efficient in small N
+        for (uint256 i = 1; i < len; i++) {
+            uint256 keyMain = main[i];
+            uint256 keyA = a[i];
+            uint256 keyB = b[i];
+            uint256 keyC = c[i];
+            uint256 j = i;
+            while (j != 0 && main[j - 1] > keyMain) {
+                main[j] = main[j - 1];
+                a[j] = a[j - 1];
+                b[j] = b[j - 1];
+                c[j] = c[j - 1];
+                j--;
+            }
+            main[j] = keyMain;
+            a[j] = keyA;
+            b[j] = keyB;
+            c[j] = keyC;
+        }
     }
 
     function _parseKey(string memory key) internal pure returns (bytes32 actionHash, string memory assetKey) {
