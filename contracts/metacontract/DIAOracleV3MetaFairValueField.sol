@@ -10,29 +10,7 @@ interface IValueStore {
         returns (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp);
 }
 
-library QuickSort {
-    function sort(uint256[] memory arr, uint256 left, uint256 right) internal pure {
-        if (left >= right) return;
-        uint256 i = left;
-        uint256 j = right;
-        uint256 pivot = arr[left + (right - left) / 2];
-        while (i <= j) {
-            while (arr[i] < pivot) i++;
-            while (arr[j] > pivot) j--;
-            if (i <= j) {
-                (arr[i], arr[j]) = (arr[j], arr[i]);
-                i++;
-                if (j > 0) j--;
-            }
-        }
-        if (left < j) sort(arr, left, j);
-        if (i < right) sort(arr, i, right);
-    }
-}
-
 contract DIAOracleV3MetaFairValueField {
-    using QuickSort for uint256[];
-
     struct MedianSet {
         uint256 fairValue;
         uint256 usdValue;
@@ -104,6 +82,7 @@ contract DIAOracleV3MetaFairValueField {
         timeoutSeconds = newTimeout;
     }
 
+    // --- CORRECTED MEDIAN LOGIC BELOW ---
     function getMedianValues(string memory key) external view returns (MedianSet memory) {
         if (threshold == 0) revert InvalidThreshold(threshold);
         if (timeoutSeconds == 0) revert InvalidTimeout(timeoutSeconds);
@@ -131,13 +110,19 @@ contract DIAOracleV3MetaFairValueField {
 
         if (count < threshold) revert ThresholdNotMet(count, threshold);
 
-        // Only sort if we have valid data
+        // Calculate sum of fairValues
+        uint256 fairSum = 0;
+        for (uint256 i = 0; i < count; i++) {
+            fairSum += fairValues[i];
+        }
+
+        // Sort: preserve correspondence across all value arrays
         if (count > 0) {
-            uint256 last = count - 1;
-            fairValues.sort(0, last);
-            usdValues.sort(0, last);
-            nums.sort(0, last);
-            dens.sort(0, last);
+            if (fairSum != 0) {
+                sortMultipleByReference(fairValues, usdValues, nums, dens, count);
+            } else {
+                sortMultipleByReference(usdValues, fairValues, nums, dens, count);
+            }
         }
 
         // Calculate true median
@@ -146,9 +131,8 @@ contract DIAOracleV3MetaFairValueField {
         uint256 numerator;
         uint256 denominator;
 
-        // odd
         if (count % 2 == 1) {
-             uint256 mid = count / 2;
+            uint256 mid = count / 2;
             fairValue = fairValues[mid];
             usdValue = usdValues[mid];
             numerator = nums[mid];
@@ -162,14 +146,41 @@ contract DIAOracleV3MetaFairValueField {
             denominator = (dens[mid1] + dens[mid2]) / 2;
         }
 
-        return
-            MedianSet({
-                fairValue: fairValue,
-                usdValue: usdValue,
-                numerator: numerator,
-                denominator: denominator,
-                timestamp: block.timestamp
-            });
+        return MedianSet({
+            fairValue: fairValue,
+            usdValue: usdValue,
+            numerator: numerator,
+            denominator: denominator,
+            timestamp: block.timestamp
+        });
+    }
+
+    // Sorts main[] ascending and reorders a[], b[], c[] in the same way.
+    function sortMultipleByReference(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256 len
+    ) internal pure {
+        for (uint256 i = 1; i < len; i++) {
+            uint256 keyMain = main[i];
+            uint256 keyA = a[i];
+            uint256 keyB = b[i];
+            uint256 keyC = c[i];
+            uint256 j = i;
+            while (j != 0 && main[j - 1] > keyMain) {
+                main[j] = main[j - 1];
+                a[j] = a[j - 1];
+                b[j] = b[j - 1];
+                c[j] = c[j - 1];
+                j--;
+            }
+            main[j] = keyMain;
+            a[j] = keyA;
+            b[j] = keyB;
+            c[j] = keyC;
+        }
     }
 
     function _parseKey(string memory key) internal pure returns (bytes32 actionHash, string memory assetKey) {
