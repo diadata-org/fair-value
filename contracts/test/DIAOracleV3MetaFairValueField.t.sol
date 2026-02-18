@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.20;
+pragma solidity 0.8.30;
 
 import "forge-std/Test.sol";
 
@@ -164,7 +164,7 @@ struct TestCase {
                     )
                 );
                 oracle.setThreshold(testCase.threshold);
-            } else if (testCase.expectedError == DIAOracleV3MetaFairValueField.InvalidTimeout.selector) {
+            } else if (testCase.expectedError == DIAOracleV3MetaFairValueField.InvalidTimeOut.selector) {
                 // Need to set threshold first, then expect revert in setTimeoutSeconds
                 vm.prank(owner);
                 oracle.setThreshold(testCase.threshold > 0 ? testCase.threshold : 1);
@@ -172,7 +172,7 @@ struct TestCase {
                 vm.prank(owner);
                 vm.expectRevert(
                     abi.encodeWithSelector(
-                        DIAOracleV3MetaFairValueField.InvalidTimeout.selector,
+                        DIAOracleV3MetaFairValueField.InvalidTimeOut.selector,
                         0
                     )
                 );
@@ -445,7 +445,7 @@ contract GetMedianValuesTimeoutTest is BaseTest {
             expectedNumerator: 0,
             expectedDenominator: 0,
             shouldRevert: true,
-            expectedError: DIAOracleV3MetaFairValueField.InvalidTimeout.selector,
+            expectedError: DIAOracleV3MetaFairValueField.InvalidTimeOut.selector,
             expectedErrorCount: 0
         });
 
@@ -624,10 +624,305 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
     }
 }
 
- 
+
+contract NumeratorDenominatorTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        // Initialize threshold and timeout for these tests
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_NumeratorDenominator_OddOracles() public {
+        // Setup: Create 3 stores with different numerators/denominators
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Store 1: 1/2 = 0.5
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 2, timestamp);
+        // Store 2: 2/3 = 0.666... (should be median)
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 3, timestamp);
+        // Store 3: 3/4 = 0.75
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 4, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Median should be the middle value (store2)
+        assertEq(result.numerator, 2, "Numerator should be 2");
+        assertEq(result.denominator, 3, "Denominator should be 3");
+    }
+
+    function test_NumeratorDenominator_EvenOracles() public {
+        // Setup: Create 4 stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Store 1: 1/2
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 2, timestamp);
+        // Store 2: 2/4 = 0.5
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 4, timestamp);
+        // Store 3: 3/6 = 0.5
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 6, timestamp);
+        // Store 4: 4/8 = 0.5
+        setStoreValues(store4, TEST_KEY, 400, 4000, 4, 8, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Average of middle two: (2/4 + 3/6) / 2 = (2 + 3) / 2 / (4 + 6) / 2
+        // But the contract calculates: (2 + 3) / 2 = 2, (4 + 6) / 2 = 5
+        assertEq(result.numerator, 2, "Numerator should be average of 2 and 3");
+        assertEq(result.denominator, 5, "Denominator should be average of 4 and 6");
+    }
+
+    function test_NumeratorDenominator_AllZero() public {
+        // Test with all zero numerators
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 0, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 0, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 0, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.numerator, 0, "Numerator should be 0");
+        assertEq(result.denominator, 1, "Denominator should be 1");
+    }
+
+    function test_NumeratorDenominator_LargeValues() public {
+        // Test with large numerator/denominator values
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1000000, 2000000, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2000000, 3000000, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3000000, 4000000, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.numerator, 2000000, "Numerator should be 2000000");
+        assertEq(result.denominator, 3000000, "Denominator should be 3000000");
+    }
+
+    function test_NumeratorDenominator_SameDenominatorDifferentNumerators() public {
+        // Test same denominator, different numerators
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 100, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 5, 100, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 9, 100, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.numerator, 5, "Numerator should be 5 (median)");
+        assertEq(result.denominator, 100, "Denominator should be 100");
+    }
+
+    function test_NumeratorDenominator_SameNumeratorDifferentDenominators() public {
+        // Test same numerator, different denominators
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 100, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 100, 5, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 100, 9, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.numerator, 100, "Numerator should be 100");
+        assertEq(result.denominator, 5, "Denominator should be 5 (median)");
+    }
+
+    function test_NumeratorDenominator_VaryingFractions() public {
+        // Test with varying fractions
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+        MockValueStore store5 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);     // 1.0
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 2, timestamp);     // 0.5
+        setStoreValues(store3, TEST_KEY, 300, 3000, 2, 3, timestamp);     // 0.666...
+        setStoreValues(store4, TEST_KEY, 400, 4000, 3, 4, timestamp);     // 0.75
+        setStoreValues(store5, TEST_KEY, 500, 5000, 1, 10, timestamp);    // 0.1
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorting is done by usdValues 
+        // Sorted by fairValue: [100, 200, 300, 400, 500]
+        // Corresponding numerators: [1, 1, 2, 3, 1]
+        // Corresponding denominators: [1, 2, 3, 4, 10]
+        // Median (3rd element, fairValue=300): numerator=2, denominator=3
+        assertEq(result.numerator, 2, "Numerator should be 2");
+        assertEq(result.denominator, 3, "Denominator should be 3");
+    }
+
+    function test_NumeratorDenominator_WithStaleData() public {
+        // Test that stale data is excluded from numerator/denominator calculation
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 currentTimestamp = 1000000;
+        vm.warp(currentTimestamp);
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 2, currentTimestamp);           // Fresh
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 3, currentTimestamp);           // Fresh
+        setStoreValues(store3, TEST_KEY, 300, 3000, 999, 999, currentTimestamp - 3700); // Stale
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Should only use fresh data (stores 1 and 2)
+        // Average: (1 + 2) / 2 = 1, (2 + 3) / 2 = 2
+        assertEq(result.numerator, 1, "Numerator should be average of 1 and 2");
+        assertEq(result.denominator, 2, "Denominator should be average of 2 and 3");
+    }
+
+    function test_NumeratorDenominator_WithFailingOracle() public {
+        // Test numerator/denominator when one oracle fails
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 2, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 3, 4, timestamp);
+        // store3 has no data (will revert)
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Should compute median from successful calls (stores 1 and 2)
+        // Average: (1 + 3) / 2 = 2, (2 + 4) / 2 = 3
+        assertEq(result.numerator, 2, "Numerator should be average of 1 and 3");
+        assertEq(result.denominator, 3, "Denominator should be average of 2 and 4");
+    }
+
+    function test_NumeratorDenominator_IndependentFromFairValue() public {
+        // Verify that sorting preserves correspondence between all value arrays
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Store values where fairValue order doesn't match numerator/denominator order
+        setStoreValues(store1, TEST_KEY, 300, 3000, 1, 2, timestamp);  // High fairValue, low num/den
+        setStoreValues(store2, TEST_KEY, 200, 2000, 10, 20, timestamp); // Medium fairValue, medium num/den
+        setStoreValues(store3, TEST_KEY, 100, 1000, 100, 200, timestamp); // Low fairValue, high num/den
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted by fairValue: [(100,1000,100,200), (200,2000,10,20), (300,3000,1,2)]
+        // Median (middle element): fairValue=200, numerator=10, denominator=20
+        // Note: Arrays are sorted together, preserving correspondence
+        assertEq(result.fairValue, 200, "FairValue median should be 200");
+        assertEq(result.numerator, 10, "Numerator median should be 10");
+        assertEq(result.denominator, 20, "Denominator median should be 20");
+    }
+
+    function test_NumeratorDenominator_GetValueIntegration() public {
+        // Test that getValue correctly returns numerator and denominator
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 2, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 3, 4, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 5, 6, timestamp);
+
+        // Test getValue with numerator key
+        (uint128 numValue, uint128 numTs) = oracle.getValue("numerator:BTC/USD");
+        assertEq(uint256(numValue), 3, "getValue should return median numerator");
+        assertEq(uint256(numTs), block.timestamp, "Timestamp should match");
+
+        // Test getValue with denominator key
+        (uint128 denValue, uint128 denTs) = oracle.getValue("denominator:BTC/USD");
+        assertEq(uint256(denValue), 4, "getValue should return median denominator");
+        assertEq(uint256(denTs), block.timestamp, "Timestamp should match");
+    }
+
+    function test_NumeratorDenominator_DataDrivenOdd() public {
+        OracleData[] memory oracleData = new OracleData[](3);
+        oracleData[0] = OracleData(100, 1000, 5, 10, 1000000, false);
+        oracleData[1] = OracleData(200, 2000, 10, 20, 1000000, false);
+        oracleData[2] = OracleData(300, 3000, 15, 30, 1000000, false);
+
+        TestCase memory testCase = TestCase({
+            name: "Numerator/Denominator - Odd Oracles",
+            oracleValues: oracleData,
+            threshold: 2,
+            timeoutSeconds: 3600,
+            blockTimestamp: 1000000,
+            expectedFairValue: 200,
+            expectedUsdValue: 2000,
+            expectedNumerator: 10,    // Middle value
+            expectedDenominator: 20,  // Middle value
+            shouldRevert: false,
+            expectedError: bytes4(0),
+            expectedErrorCount: 0
+        });
+
+        runTestCase(testCase);
+    }
+
+    function test_NumeratorDenominator_DataDrivenEven() public {
+        OracleData[] memory oracleData = new OracleData[](4);
+        oracleData[0] = OracleData(100, 1000, 2, 4, 1000000, false);
+        oracleData[1] = OracleData(200, 2000, 4, 8, 1000000, false);
+        oracleData[2] = OracleData(300, 3000, 6, 12, 1000000, false);
+        oracleData[3] = OracleData(400, 4000, 8, 16, 1000000, false);
+
+        TestCase memory testCase = TestCase({
+            name: "Numerator/Denominator - Even Oracles",
+            oracleValues: oracleData,
+            threshold: 2,
+            timeoutSeconds: 3600,
+            blockTimestamp: 1000000,
+            expectedFairValue: 250,
+            expectedUsdValue: 2500,
+            expectedNumerator: 5,    // Average of 4 and 6
+            expectedDenominator: 10, // Average of 8 and 12
+            shouldRevert: false,
+            expectedError: bytes4(0),
+            expectedErrorCount: 0
+        });
+
+        runTestCase(testCase);
+    }
+}
+
+
 contract AdminFunctionsTest is BaseTest {
     function test_ConstructorWithZeroAddress() public {
-        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ZeroAddress.selector));
+        vm.expectRevert(); // OwnableInvalidOwner
         new DIAOracleV3MetaFairValueField(address(0));
     }
 
@@ -647,13 +942,13 @@ contract AdminFunctionsTest is BaseTest {
 
     function test_TransferOwnershipToZeroAddress() public {
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ZeroAddress.selector));
+        vm.expectRevert(); // OwnableInvalidOwner
         oracle.transferOwnership(address(0));
     }
 
     function test_TransferOwnershipNotOwner() public {
         vm.prank(user);
-        vm.expectRevert("not owner");
+        vm.expectRevert(); // OwnableUnauthorizedAccount
         oracle.transferOwnership(address(0x3));
     }
 
@@ -688,7 +983,7 @@ contract AdminFunctionsTest is BaseTest {
         MockValueStore store = new MockValueStore();
 
         vm.prank(user);
-        vm.expectRevert("not owner");
+        vm.expectRevert(); // OwnableUnauthorizedAccount
         oracle.addValueStore(address(store));
     }
 
@@ -718,7 +1013,7 @@ contract AdminFunctionsTest is BaseTest {
         MockValueStore store = new MockValueStore();
 
         vm.prank(user);
-        vm.expectRevert("not owner");
+        vm.expectRevert(); // OwnableUnauthorizedAccount
         oracle.removeValueStore(address(store));
     }
 
@@ -757,7 +1052,7 @@ contract AdminFunctionsTest is BaseTest {
 
     function test_SetThresholdNotOwner() public {
         vm.prank(user);
-        vm.expectRevert("not owner");
+        vm.expectRevert(); // OwnableUnauthorizedAccount
         oracle.setThreshold(5);
     }
 
@@ -770,8 +1065,30 @@ contract AdminFunctionsTest is BaseTest {
 
     function test_SetTimeoutSecondsNotOwner() public {
         vm.prank(user);
-        vm.expectRevert("not owner");
+        vm.expectRevert(); // OwnableUnauthorizedAccount
         oracle.setTimeoutSeconds(7200);
+    }
+
+    function test_SetTimeoutSecondsExceedsLimit() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(DIAOracleV3MetaFairValueField.TimeoutExceedsLimit.selector, 86401));
+        oracle.setTimeoutSeconds(86401);
+    }
+
+    function test_SetTimeoutSecondsEmitsEvent() public {
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit DIAOracleV3MetaFairValueField.TimeoutSecondsChanged(3600, 7200);
+        oracle.setTimeoutSeconds(7200);
+    }
+
+    function test_SetTimeoutSecondsAtBoundary() public {
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(86400);
+        assertEq(oracle.timeoutSeconds(), 86400);
     }
 }
 

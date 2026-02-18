@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.20;
+pragma solidity 0.8.30;
+
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IValueStore {
     function getValue(
@@ -10,7 +12,7 @@ interface IValueStore {
         returns (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp);
 }
 
-contract DIAOracleV3MetaFairValueField {
+contract DIAOracleV3MetaFairValueField is Ownable {
     struct MedianSet {
         uint256 fairValue;
         uint256 usdValue;
@@ -23,7 +25,6 @@ contract DIAOracleV3MetaFairValueField {
     uint256 public numValueStores;
     uint256 public threshold;
     uint256 public timeoutSeconds;
-    address public owner;
 
     bytes32 private constant FAIR_VALUE = keccak256("fairValue");
     bytes32 private constant USD_VALUE = keccak256("usdValue");
@@ -31,25 +32,17 @@ contract DIAOracleV3MetaFairValueField {
     bytes32 private constant DENOMINATOR = keccak256("denominator");
 
     error InvalidThreshold(uint256);
-    error InvalidTimeout(uint256);
+    error InvalidTimeOut(uint256);
+    error TimeoutExceedsLimit(uint256);
     error ThresholdNotMet(uint256, uint256);
     error ZeroAddress();
     error OracleExists();
     error OracleNotFound();
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
-    }
+    event TimeoutSecondsChanged(uint256 indexed oldTimeoutSeconds, uint256 indexed newTimeoutSeconds);
 
-    constructor(address _owner) {
+    constructor(address _owner) Ownable(_owner) {
         if (_owner == address(0)) revert ZeroAddress();
-        owner = _owner;
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        if (newOwner == address(0)) revert ZeroAddress();
-        owner = newOwner;
     }
 
     function addValueStore(address newStore) external onlyOwner {
@@ -77,15 +70,22 @@ contract DIAOracleV3MetaFairValueField {
         threshold = newThreshold;
     }
 
-    function setTimeoutSeconds(uint256 newTimeout) external onlyOwner {
-        if (newTimeout == 0) revert InvalidTimeout(newTimeout);
-        timeoutSeconds = newTimeout;
+    function setTimeoutSeconds(uint256 newTimeoutSeconds) external onlyOwner {
+        if (newTimeoutSeconds == 0) {
+            revert InvalidTimeOut(newTimeoutSeconds);
+        }
+        if (newTimeoutSeconds > 86400) {
+            revert TimeoutExceedsLimit(newTimeoutSeconds);
+        }
+        uint256 oldTimeoutSeconds = timeoutSeconds;
+        timeoutSeconds = newTimeoutSeconds;
+        emit TimeoutSecondsChanged(oldTimeoutSeconds, newTimeoutSeconds);
     }
 
     // --- CORRECTED MEDIAN LOGIC BELOW ---
     function getMedianValues(string memory key) external view returns (MedianSet memory) {
         if (threshold == 0) revert InvalidThreshold(threshold);
-        if (timeoutSeconds == 0) revert InvalidTimeout(timeoutSeconds);
+        if (timeoutSeconds == 0) revert InvalidTimeOut(timeoutSeconds);
 
         uint256[] memory fairValues = new uint256[](numValueStores);
         uint256[] memory usdValues = new uint256[](numValueStores);
