@@ -42,8 +42,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     event TimeoutSecondsChanged(uint256 indexed oldTimeoutSeconds, uint256 indexed newTimeoutSeconds);
     event ThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
 
-    constructor(address _owner) Ownable(_owner) {
-        if (_owner == address(0)) revert ZeroAddress();
+    constructor(address initialOwner) Ownable(initialOwner) {
+        if (initialOwner == address(0)) revert ZeroAddress();
     }
 
     function addValueStore(address newStore) external onlyOwner {
