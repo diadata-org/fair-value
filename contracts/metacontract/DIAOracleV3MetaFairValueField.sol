@@ -94,6 +94,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory usdValues = new uint256[](numValueStores);
         uint256[] memory nums = new uint256[](numValueStores);
         uint256[] memory dens = new uint256[](numValueStores);
+        uint256[] memory timestamps = new uint256[](numValueStores);
         uint256 count = 0;
 
         for (uint256 i = 0; i < numValueStores; ++i) {
@@ -105,6 +106,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
                 usdValues[count] = usdV;
                 nums[count] = num;
                 dens[count] = den;
+                timestamps[count] = ts;
                 count++;
             } catch {
                 continue;
@@ -122,9 +124,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         // Sort: preserve correspondence across all value arrays
         if (count > 0) {
             if (fairSum != 0) {
-                sortMultipleByReference(fairValues, usdValues, nums, dens, count);
+                sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
             } else {
-                sortMultipleByReference(usdValues, fairValues, nums, dens, count);
+                sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
             }
         }
 
@@ -133,6 +135,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 usdValue;
         uint256 numerator;
         uint256 denominator;
+        uint256 medianTimestamp;
 
         if (count % 2 == 1) {
             uint256 mid = count / 2;
@@ -140,6 +143,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             usdValue = usdValues[mid];
             numerator = nums[mid];
             denominator = dens[mid];
+            medianTimestamp = timestamps[mid];
         } else {
             uint256 mid1 = (count / 2) - 1;
             uint256 mid2 = count / 2;
@@ -147,6 +151,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             usdValue = (usdValues[mid1] + usdValues[mid2]) / 2;
             numerator = (nums[mid1] + nums[mid2]) / 2;
             denominator = (dens[mid1] + dens[mid2]) / 2;
+            medianTimestamp = (timestamps[mid1] + timestamps[mid2]) / 2;
         }
 
         return MedianSet({
@@ -154,16 +159,17 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             usdValue: usdValue,
             numerator: numerator,
             denominator: denominator,
-            timestamp: block.timestamp
+            timestamp: medianTimestamp
         });
     }
 
-    // Sorts main[] ascending and reorders a[], b[], c[] in the same way.
-    function sortMultipleByReference(
+    // Sorts main[] ascending and reorders a[], b[], c[], d[] in the same way.
+    function sortMultipleByReferenceWithTimestamps(
         uint256[] memory main,
         uint256[] memory a,
         uint256[] memory b,
         uint256[] memory c,
+        uint256[] memory d,
         uint256 len
     ) internal pure {
         for (uint256 i = 1; i < len; i++) {
@@ -171,18 +177,21 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             uint256 keyA = a[i];
             uint256 keyB = b[i];
             uint256 keyC = c[i];
+            uint256 keyD = d[i];
             uint256 j = i;
             while (j != 0 && main[j - 1] > keyMain) {
                 main[j] = main[j - 1];
                 a[j] = a[j - 1];
                 b[j] = b[j - 1];
                 c[j] = c[j - 1];
+                d[j] = d[j - 1];
                 j--;
             }
             main[j] = keyMain;
             a[j] = keyA;
             b[j] = keyB;
             c[j] = keyC;
+            d[j] = keyD;
         }
     }
 
