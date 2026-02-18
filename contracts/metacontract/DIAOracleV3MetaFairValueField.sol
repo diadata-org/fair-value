@@ -40,6 +40,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error OracleNotFound();
 
     event TimeoutSecondsChanged(uint256 indexed oldTimeoutSeconds, uint256 indexed newTimeoutSeconds);
+    event ThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
 
     constructor(address _owner) Ownable(_owner) {
         if (_owner == address(0)) revert ZeroAddress();
@@ -67,7 +68,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     function setThreshold(uint256 newThreshold) external onlyOwner {
         if (newThreshold == 0) revert InvalidThreshold(newThreshold);
+        uint256 oldThreshold = threshold;
         threshold = newThreshold;
+        emit ThresholdChanged(oldThreshold, newThreshold);
     }
 
     function setTimeoutSeconds(uint256 newTimeoutSeconds) external onlyOwner {

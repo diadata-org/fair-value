@@ -1050,6 +1050,16 @@ contract AdminFunctionsTest is BaseTest {
         assertEq(oracle.threshold(), 5);
     }
 
+    function test_SetThresholdEmitsEvent() public {
+        vm.prank(owner);
+        oracle.setThreshold(3);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit DIAOracleV3MetaFairValueField.ThresholdChanged(3, 5);
+        oracle.setThreshold(5);
+    }
+
     function test_SetThresholdNotOwner() public {
         vm.prank(user);
         vm.expectRevert(); // OwnableUnauthorizedAccount
