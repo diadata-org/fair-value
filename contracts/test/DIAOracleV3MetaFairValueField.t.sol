@@ -1236,3 +1236,159 @@ contract GetValueTest is BaseTest {
         assertEq(uint256(ts), block.timestamp);
     }
 }
+
+/*//////////////////////////////////////////////////////////////
+                        TIMESTAMP TEST SUITE
+//////////////////////////////////////////////////////////////*/
+contract TimestampTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_Timestamp_ReturnsOracleData_OddOracles() public {
+        // Test with odd number of oracles - should return median timestamp
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 baseTimestamp = block.timestamp;
+        
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 1000);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Should return median value (200) and its timestamp (baseTimestamp + 500)
+        assertEq(result.fairValue, 200);
+        assertEq(result.timestamp, baseTimestamp + 500, "Should return median oracle timestamp");
+    }
+
+    function test_Timestamp_ReturnsOracleData_EvenOracles() public {
+        // Test with even number of oracles - should return average of middle two timestamps
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 baseTimestamp = block.timestamp;
+        
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 400);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 600);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 4, 1, baseTimestamp + 1000);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Median values: 200 and 300
+        // Average timestamps: (baseTimestamp + 400 + baseTimestamp + 600) / 2 = baseTimestamp + 500
+        assertEq(result.fairValue, 250);
+        assertEq(result.timestamp, baseTimestamp + 500, "Should return average of middle two timestamps");
+    }
+
+    function test_Timestamp_TrackedThroughSorting() public {
+        // Verify that timestamp moves with the value during sorting
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 baseTimestamp = block.timestamp;
+        
+        // Values: 300 (oldest), 200 (middle), 100 (newest)
+        setStoreValues(store1, TEST_KEY, 300, 3000, 3, 1, baseTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
+        setStoreValues(store3, TEST_KEY, 100, 1000, 1, 1, baseTimestamp + 1000);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted by fairValue: [100, 200, 300]
+        // Sorted timestamps: [baseTimestamp + 1000, baseTimestamp + 500, baseTimestamp]
+        // Median (middle): fairValue=200, timestamp=baseTimestamp + 500
+        assertEq(result.fairValue, 200);
+        assertEq(result.timestamp, baseTimestamp + 500, "Timestamp should follow value during sorting");
+    }
+
+    function test_Timestamp_WithStaleDataExcluded() public {
+        // Verify that stale data is excluded and doesn't affect timestamp
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 currentTimestamp = 1000000;
+        vm.warp(currentTimestamp);
+        
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, currentTimestamp);           // Fresh
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, currentTimestamp + 500);           // Fresh
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, currentTimestamp - 3700); // Stale
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Should only use fresh data (stores 1 and 2)
+        // Average of timestamps: (currentTimestamp + currentTimestamp + 500) / 2 = currentTimestamp + 250
+        assertEq(result.fairValue, 150);
+        assertEq(result.timestamp, currentTimestamp + 250, "Should average only fresh timestamps");
+    }
+
+    function test_Timestamp_GetValueIntegration() public {
+        // Test that getValue returns the median timestamp
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 baseTimestamp = block.timestamp;
+        
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 1000);
+
+        // Test getValue with fairValue key
+        (uint128 value, uint128 ts) = oracle.getValue("fairValue:BTC/USD");
+        assertEq(uint256(value), 200);
+        assertEq(uint256(ts), baseTimestamp + 500, "getValue should return median timestamp");
+    }
+
+    function test_Timestamp_SameValuesDifferentTimestamps() public {
+        // Test when values are the same but timestamps differ
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 baseTimestamp = block.timestamp;
+        
+        // Same fairValue, different timestamps
+        setStoreValues(store1, TEST_KEY, 200, 2000, 2, 1, baseTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
+        setStoreValues(store3, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 1000);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // All values are 200, so median is 200
+        // Timestamps sorted: [baseTimestamp, baseTimestamp + 500, baseTimestamp + 1000]
+        // Median timestamp: baseTimestamp + 500
+        assertEq(result.fairValue, 200);
+        assertEq(result.timestamp, baseTimestamp + 500, "Should use median timestamp even when values are same");
+    }
+
+    function test_Timestamp_LargeTimeDifferences() public {
+        // Test with large differences in oracle timestamps
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 baseTimestamp = block.timestamp;
+        
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 3600);  // 1 hour later
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 7200);  // 2 hours later
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Median timestamp should be baseTimestamp + 3600
+        assertEq(result.fairValue, 200);
+        assertEq(result.timestamp, baseTimestamp + 3600, "Should handle large time differences");
+    }
+}
