@@ -85,18 +85,50 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit TimeoutSecondsChanged(oldTimeoutSeconds, newTimeoutSeconds);
     }
 
-    // --- CORRECTED MEDIAN LOGIC BELOW ---
     function getMedianValues(string memory key) external view returns (MedianSet memory) {
-        if (threshold == 0) revert InvalidThreshold(threshold);
-        if (timeoutSeconds == 0) revert InvalidTimeOut(timeoutSeconds);
+        (
+            uint256[] memory fairValues,
+            uint256[] memory usdValues,
+            uint256[] memory nums,
+            uint256[] memory dens,
+            uint256[] memory timestamps
+        ) = _initializeValueArrays();
 
-        uint256[] memory fairValues = new uint256[](numValueStores);
-        uint256[] memory usdValues = new uint256[](numValueStores);
-        uint256[] memory nums = new uint256[](numValueStores);
-        uint256[] memory dens = new uint256[](numValueStores);
-        uint256[] memory timestamps = new uint256[](numValueStores);
-        uint256 count = 0;
+        uint256 count = _collectValues(key, fairValues, usdValues, nums, dens, timestamps);
 
+        _ensureThresholdMet(count);
+
+        _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
+
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count);
+    }
+
+    function _initializeValueArrays()
+        private
+        view
+        returns (
+            uint256[] memory fairValues,
+            uint256[] memory usdValues,
+            uint256[] memory nums,
+            uint256[] memory dens,
+            uint256[] memory timestamps
+        )
+    {
+        fairValues = new uint256[](numValueStores);
+        usdValues = new uint256[](numValueStores);
+        nums = new uint256[](numValueStores);
+        dens = new uint256[](numValueStores);
+        timestamps = new uint256[](numValueStores);
+    }
+
+    function _collectValues(
+        string memory key,
+        uint256[] memory fairValues,
+        uint256[] memory usdValues,
+        uint256[] memory nums,
+        uint256[] memory dens,
+        uint256[] memory timestamps
+    ) private view returns (uint256 count) {
         for (uint256 i = 0; i < numValueStores; ++i) {
             IValueStore store = IValueStore(valueStores[i]);
             try store.getValue(key) returns (uint256 fairV, uint256 usdV, uint256 num, uint256 den, uint256 ts) {
@@ -112,25 +144,42 @@ contract DIAOracleV3MetaFairValueField is Ownable {
                 continue;
             }
         }
+    }
 
+    function _ensureThresholdMet(uint256 count) private view {
         if (count < threshold) revert ThresholdNotMet(count, threshold);
+    }
 
-        // Calculate sum of fairValues
+    function _sortValues(
+        uint256[] memory fairValues,
+        uint256[] memory usdValues,
+        uint256[] memory nums,
+        uint256[] memory dens,
+        uint256[] memory timestamps,
+        uint256 count
+    ) private pure {
+        if (count == 0) return;
+
         uint256 fairSum = 0;
         for (uint256 i = 0; i < count; i++) {
             fairSum += fairValues[i];
         }
 
-        // Sort: preserve correspondence across all value arrays
-        if (count > 0) {
-            if (fairSum != 0) {
-                sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
-            } else {
-                sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
-            }
+        if (fairSum != 0) {
+            sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
+        } else {
+            sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
         }
+    }
 
-        // Calculate true median
+    function _calculateMedian(
+        uint256[] memory fairValues,
+        uint256[] memory usdValues,
+        uint256[] memory nums,
+        uint256[] memory dens,
+        uint256[] memory timestamps,
+        uint256 count
+    ) private pure returns (MedianSet memory) {
         uint256 fairValue;
         uint256 usdValue;
         uint256 numerator;

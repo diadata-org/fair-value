@@ -10,6 +10,10 @@ import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 /// @notice Stores fairValue, valueUsd, numerator, denominator per string key
 /// @dev UUPS upgradeable contract version. Uses reinitializer for future extensibility.
 contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC165 {
+    // --- Errors ---
+
+    error ZeroAddress();
+
     // --- Value storage ---
 
     struct StoredValue {
@@ -55,6 +59,7 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     ///      to allow future upgrades to add new initialization logic with version 2, 3, etc.
     /// @param initialOwner The address that will own the contract
     function initialize(address initialOwner) public reinitializer(1) {
+        if (initialOwner == address(0)) revert ZeroAddress();
         __Ownable_init(initialOwner);
     }
 
