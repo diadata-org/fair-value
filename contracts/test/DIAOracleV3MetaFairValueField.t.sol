@@ -622,6 +622,33 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
             }
         }
     }
+
+    function test_SortByUsdValueWhenAllFairValuesAreZero() public {
+        // Test edge case: all fairValues are 0, should sort by usdValues
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // All fairValues are 0, but usdValues differ
+        setStoreValues(store1, TEST_KEY, 0, 1000, 1, 1, timestamp);       // fairValue=0, usdValue=1000
+        setStoreValues(store2, TEST_KEY, 0, 2000, 2, 1, timestamp);       // fairValue=0, usdValue=2000
+        setStoreValues(store3, TEST_KEY, 0, 3000, 3, 1, timestamp);       // fairValue=0, usdValue=3000
+        setStoreValues(store4, TEST_KEY, 0, 4000, 4, 1, timestamp);       // fairValue=0, usdValue=4000
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Should sort by usdValues since all fairValues are 0
+        // Sorted usdValues: [1000, 2000, 3000, 4000]
+        // Median of even count: average of middle two (2000 + 3000) / 2 = 2500
+        assertEq(result.fairValue, 0, "All fairValues should be 0");
+        assertEq(result.usdValue, 2500, "Should be median of usdValues");
+        assertEq(result.numerator, 2, "Should be average of middle numerators");
+        assertEq(result.denominator, 1, "Should be average of middle denominators");
+        assertEq(result.timestamp, timestamp, "Should return max timestamp");
+    }
 }
 
 
