@@ -1269,14 +1269,14 @@ contract TimestampTest is BaseTest {
     }
 
     function test_Timestamp_ReturnsOracleData_EvenOracles() public {
-        // Test with even number of oracles - should return average of middle two timestamps
+        // Test with even number of oracles - should return max of middle two timestamps
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
         MockValueStore store3 = createMockStore();
         MockValueStore store4 = createMockStore();
 
         uint256 baseTimestamp = block.timestamp;
-        
+
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 400);
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 600);
@@ -1284,10 +1284,9 @@ contract TimestampTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // Median values: 200 and 300
-        // Average timestamps: (baseTimestamp + 400 + baseTimestamp + 600) / 2 = baseTimestamp + 500
+
         assertEq(result.fairValue, 250);
-        assertEq(result.timestamp, baseTimestamp + 500, "Should return average of middle two timestamps");
+        assertEq(result.timestamp, baseTimestamp + 600, "Should return max of middle two timestamps");
     }
 
     function test_Timestamp_TrackedThroughSorting() public {
@@ -1320,17 +1319,17 @@ contract TimestampTest is BaseTest {
 
         uint256 currentTimestamp = 1000000;
         vm.warp(currentTimestamp);
-        
+
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, currentTimestamp);           // Fresh
-        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, currentTimestamp + 500);           // Fresh
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, currentTimestamp + 500);    // Fresh
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, currentTimestamp - 3700); // Stale
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Should only use fresh data (stores 1 and 2)
-        // Average of timestamps: (currentTimestamp + currentTimestamp + 500) / 2 = currentTimestamp + 250
+        // For even count, returns max of middle two timestamps (currentTimestamp + 500)
         assertEq(result.fairValue, 150);
-        assertEq(result.timestamp, currentTimestamp + 250, "Should average only fresh timestamps");
+        assertEq(result.timestamp, currentTimestamp + 500, "Should return max timestamp of fresh data");
     }
 
     function test_Timestamp_GetValueIntegration() public {

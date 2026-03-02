@@ -134,7 +134,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory dens,
         uint256[] memory timestamps
     ) private view returns (uint256 count) {
-        for (uint256 i = 0; i < numValueStores; ++i) {
+        uint256 storeCount = numValueStores;
+        for (uint256 i = 0; i < storeCount; ++i) {
             IValueStore store = IValueStore(valueStores[i]);
             try store.getValue(key) returns (uint256 fairV, uint256 usdV, uint256 num, uint256 den, uint256 ts) {
                 if (ts + timeoutSeconds < block.timestamp) continue;
@@ -205,7 +206,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             usdValue = (usdValues[mid1] + usdValues[mid2]) / 2;
             numerator = (nums[mid1] + nums[mid2]) / 2;
             denominator = (dens[mid1] + dens[mid2]) / 2;
-            medianTimestamp = timestamps[mid1];
+            medianTimestamp = timestamps[mid2];
         }
 
         return MedianSet({
