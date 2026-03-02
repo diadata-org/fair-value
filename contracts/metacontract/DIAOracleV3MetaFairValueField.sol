@@ -209,13 +209,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             medianTimestamp = timestamps[mid2];
         }
 
-        return MedianSet({
-            fairValue: fairValue,
-            usdValue: usdValue,
-            numerator: numerator,
-            denominator: denominator,
-            timestamp: medianTimestamp
-        });
+        return
+            MedianSet({
+                fairValue: fairValue,
+                usdValue: usdValue,
+                numerator: numerator,
+                denominator: denominator,
+                timestamp: medianTimestamp
+            });
     }
 
     // Sorts main[] ascending and reorders a[], b[], c[], d[] in the same way.
