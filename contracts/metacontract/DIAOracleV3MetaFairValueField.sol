@@ -200,7 +200,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             usdValue = (usdValues[mid1] + usdValues[mid2]) / 2;
             numerator = (nums[mid1] + nums[mid2]) / 2;
             denominator = (dens[mid1] + dens[mid2]) / 2;
-            medianTimestamp = (timestamps[mid1] + timestamps[mid2]) / 2;
+            medianTimestamp = timestamps[mid1];
         }
 
         return MedianSet({
