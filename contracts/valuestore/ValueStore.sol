@@ -18,6 +18,9 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     error DivisionByZero();
     error InvalidArrayLengths();
     error NoDataForKey();
+    error InvalidKey();
+    error InvalidKeyInBatch(uint256 index);
+    error DivisionByZeroInBatch(uint256 index);
 
     // --- Value storage ---
 
@@ -50,17 +53,16 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /* solhint-enable gas-indexed-events */
 
     /// @notice Storage gap for future upgrades (50 slots)
-    /// @dev Storage slots from forge build --extra-output storageLayout:
-    ///
-    /// Slot | Label    | Type
-    /// ----|----------|--------------------------------------------------
-    ///   0  | _data    | mapping(string => struct StoredValue)
-    ///   1+ | __gap   | 50 slots reserved for future upgrades
-    ///
-    /// Note: Parent contract storage (before slot 0):
-    /// - Initializable: 5 slots (_initialized, _initializing, __gap)
-    /// - OwnableUpgradeable: 1 slot (_owner)
-    /// Total contract uses slot 0 + parent slots + 50 gap slots
+    /// @dev IMPORTANT: This gap starts at contract-relative slot 1, but absolute slot 7 in the proxy.
+    ///      Parent contracts occupy slots 0-5:
+    ///      - Initializable: 5 slots (_initialized, _initializing, __gap[3])
+    ///      - OwnableUpgradeable: 1 slot (_owner)
+    ///      ValueStore storage layout (absolute slots in proxy):
+    ///      Slot | Label              | Type
+    ///      -----|--------------------|-----------------------------------------
+    ///        6  | _data              | mapping(string => struct StoredValue)
+    ///       7-56| __gap              | 50 slots reserved for future upgrades
+    ///      When adding new state variables in upgrades, place them BEFORE __gap.
     uint256[50] private __gap;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -96,6 +98,9 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         uint256 numerator,
         uint256 denominator
     ) external onlyOwner {
+        if (bytes(key).length == 0) {
+            revert InvalidKey();
+        }
         if (numerator != 0 && denominator == 0) {
             revert DivisionByZero();
         }
@@ -135,8 +140,11 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         }
 
         for (uint256 i = 0; i < length; ++i) {
+            if (bytes(keys[i]).length == 0) {
+                revert InvalidKeyInBatch(i);
+            }
             if (numerators[i] != 0 && denominators[i] == 0) {
-                revert DivisionByZero();
+                revert DivisionByZeroInBatch(i);
             }
 
             _data[keys[i]] = StoredValue({

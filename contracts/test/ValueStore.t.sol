@@ -463,10 +463,8 @@ contract ValueStoreTest is Test {
 
     function test_EmptyStringKey() public {
         vm.prank(owner);
+        vm.expectRevert(ValueStore.InvalidKey.selector);
         valueStore.setValue("", 100, 1000, 1, 1);
-
-        (uint256 fairValue,,,,) = valueStore.getValue("");
-        assertEq(fairValue, 100);
     }
 
     function test_SetValueWithZeroNumeratorAndDenominator() public {
@@ -509,6 +507,89 @@ contract ValueStoreTest is Test {
 
         (uint256 fairValue2,,,,) = valueStore.getValue("ETH/USD");
         assertEq(fairValue2, 200);
+    }
+
+    function test_EmptyStringKeyInMultipleValues() public {
+        string[] memory keys = new string[](2);
+        keys[0] = "BTC/USD";
+        keys[1] = "";
+
+        uint256[] memory fairValues = new uint256[](2);
+        fairValues[0] = 100;
+        fairValues[1] = 200;
+
+        uint256[] memory valueUsds = new uint256[](2);
+        valueUsds[0] = 1000;
+        valueUsds[1] = 2000;
+
+        uint256[] memory numerators = new uint256[](2);
+        numerators[0] = 1;
+        numerators[1] = 1;
+
+        uint256[] memory denominators = new uint256[](2);
+        denominators[0] = 1;
+        denominators[1] = 1;
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ValueStore.InvalidKeyInBatch.selector, 1));
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+    }
+
+    function test_DivisionByZeroInMultipleValues() public {
+        string[] memory keys = new string[](3);
+        keys[0] = "BTC/USD";
+        keys[1] = "ETH/USD";
+        keys[2] = "AAPL/USD";
+
+        uint256[] memory fairValues = new uint256[](3);
+        fairValues[0] = 100;
+        fairValues[1] = 200;
+        fairValues[2] = 300;
+
+        uint256[] memory valueUsds = new uint256[](3);
+        valueUsds[0] = 1000;
+        valueUsds[1] = 2000;
+        valueUsds[2] = 3000;
+
+        uint256[] memory numerators = new uint256[](3);
+        numerators[0] = 1;
+        numerators[1] = 1;
+        numerators[2] = 1;
+
+        uint256[] memory denominators = new uint256[](3);
+        denominators[0] = 1;
+        denominators[1] = 0;  // This will cause DivisionByZeroInBatch at index 1
+        denominators[2] = 1;
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ValueStore.DivisionByZeroInBatch.selector, 1));
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+    }
+
+    function test_BatchErrorAtIndexZero() public {
+        string[] memory keys = new string[](2);
+        keys[0] = "";  // Error at first element (index 0)
+        keys[1] = "ETH/USD";
+
+        uint256[] memory fairValues = new uint256[](2);
+        fairValues[0] = 100;
+        fairValues[1] = 200;
+
+        uint256[] memory valueUsds = new uint256[](2);
+        valueUsds[0] = 1000;
+        valueUsds[1] = 2000;
+
+        uint256[] memory numerators = new uint256[](2);
+        numerators[0] = 1;
+        numerators[1] = 1;
+
+        uint256[] memory denominators = new uint256[](2);
+        denominators[0] = 1;
+        denominators[1] = 1;
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ValueStore.InvalidKeyInBatch.selector, 0));
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
     }
 
     // --- supportsInterface Tests ---
