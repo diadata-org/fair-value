@@ -3,7 +3,17 @@ pragma solidity 0.8.30;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+/// @title IValueStore
+/// @notice Interface for ValueStore contracts
+/// @author DIA (diadata.org)
 interface IValueStore {
+    /// @notice Get stored value for a key
+    /// @param key The key to retrieve
+    /// @return fairValue The stored fair value
+    /// @return usdValue The stored USD value
+    /// @return numerator The stored numerator
+    /// @return denominator The stored denominator
+    /// @return timestamp The timestamp of the update
     function getValue(
         string memory key
     )
@@ -12,6 +22,10 @@ interface IValueStore {
         returns (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp);
 }
 
+/// @title DIAOracleV3MetaFairValueField
+/// @notice Aggregates values from multiple ValueStore contracts using median calculation
+/// @author DIA (diadata.org)
+/// @dev Returns median values from multiple oracle sources with timeout and threshold protection
 contract DIAOracleV3MetaFairValueField is Ownable {
     struct MedianSet {
         uint256 fairValue;
@@ -21,16 +35,20 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 timestamp;
     }
 
+    /// @notice Mapping of value store addresses by index
     mapping(uint256 => address) public valueStores;
+    /// @notice Number of registered value stores
     uint256 public numValueStores;
+    /// @notice Minimum number of valid responses required
     uint256 public threshold;
+    /// @notice Maximum age of data in seconds
     uint256 public timeoutSeconds;
 
-    bytes32 private constant FAIR_VALUE = keccak256("fairValue");
-    bytes32 private constant USD_VALUE = keccak256("usdValue");
-    bytes32 private constant NUMERATOR = keccak256("numerator");
-    bytes32 private constant DENOMINATOR = keccak256("denominator");
-    uint256 private constant MAX_TIMEOUT_SECONDS = 1 days;
+    bytes32 private constant _FAIR_VALUE = keccak256("fairValue");
+    bytes32 private constant _USD_VALUE = keccak256("usdValue");
+    bytes32 private constant _NUMERATOR = keccak256("numerator");
+    bytes32 private constant _DENOMINATOR = keccak256("denominator");
+    uint256 private constant _MAX_TIMEOUT_SECONDS = 1 days;
 
     error InvalidThreshold(uint256);
     error InvalidTimeOut(uint256);
@@ -40,15 +58,34 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error OracleExists();
     error OracleNotFound();
 
+    /// @notice Emitted when timeout seconds is changed
+    /// @param oldTimeoutSeconds The previous timeout value
+    /// @param newTimeoutSeconds The new timeout value
     event TimeoutSecondsChanged(uint256 indexed oldTimeoutSeconds, uint256 indexed newTimeoutSeconds);
+
+    /// @notice Emitted when threshold is changed
+    /// @param oldThreshold The previous threshold value
+    /// @param newThreshold The new threshold value
     event ThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
+
+    /// @notice Emitted when a value store is added
+    /// @param storeAddress The address of the added store
+    /// @param storeIndex The index of the added store
     event ValueStoreAdded(address indexed storeAddress, uint256 indexed storeIndex);
+
+    /// @notice Emitted when a value store is removed
+    /// @param storeAddress The address of the removed store
+    /// @param storeIndex The index of the removed store
     event ValueStoreRemoved(address indexed storeAddress, uint256 indexed storeIndex);
 
+    /// @notice Constructor to initialize the oracle with an owner
+    /// @param initialOwner The address that will own the contract
     constructor(address initialOwner) Ownable(initialOwner) {
         if (initialOwner == address(0)) revert ZeroAddress();
     }
 
+    /// @notice Add a new ValueStore to the oracle
+    /// @param newStore The address of the ValueStore to add
     function addValueStore(address newStore) external onlyOwner {
         if (newStore == address(0)) revert ZeroAddress();
         for (uint256 i = 0; i < numValueStores; ++i) {
@@ -58,6 +95,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit ValueStoreAdded(newStore, numValueStores - 1);
     }
 
+    /// @notice Remove a ValueStore from the oracle
+    /// @param storeAddr The address of the ValueStore to remove
     function removeValueStore(address storeAddr) external onlyOwner {
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == storeAddr) {
@@ -71,6 +110,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         revert OracleNotFound();
     }
 
+    /// @notice Set the minimum number of valid responses required
+    /// @param newThreshold The new threshold value
     function setThreshold(uint256 newThreshold) external onlyOwner {
         if (newThreshold == 0) revert InvalidThreshold(newThreshold);
         uint256 oldThreshold = threshold;
@@ -78,11 +119,13 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit ThresholdChanged(oldThreshold, newThreshold);
     }
 
+    /// @notice Set the maximum age of data considered valid
+    /// @param newTimeoutSeconds The new timeout in seconds
     function setTimeoutSeconds(uint256 newTimeoutSeconds) external onlyOwner {
         if (newTimeoutSeconds == 0) {
             revert InvalidTimeOut(newTimeoutSeconds);
         }
-        if (newTimeoutSeconds > MAX_TIMEOUT_SECONDS) {
+        if (newTimeoutSeconds > _MAX_TIMEOUT_SECONDS) {
             revert TimeoutExceedsLimit(newTimeoutSeconds);
         }
         uint256 oldTimeoutSeconds = timeoutSeconds;
@@ -90,6 +133,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit TimeoutSecondsChanged(oldTimeoutSeconds, newTimeoutSeconds);
     }
 
+    /// @notice Get median values from all registered ValueStores
+    /// @param key The key to query from ValueStores
+    /// @return median The median of all valid values
     function getMedianValues(string memory key) public view returns (MedianSet memory median) {
         (
             uint256[] memory fairValues,
@@ -167,14 +213,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         if (count == 0) return;
 
         uint256 fairSum = 0;
-        for (uint256 i = 0; i < count; i++) {
+        for (uint256 i = 0; i < count; ++i) {
             fairSum += fairValues[i];
         }
 
         if (fairSum != 0) {
-            sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
+            _sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
         } else {
-            sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
+            _sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
         }
     }
 
@@ -220,7 +266,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     }
 
     // Sorts main[] ascending and reorders a[], b[], c[], d[] in the same way.
-    function sortMultipleByReferenceWithTimestamps(
+    function _sortMultipleByReferenceWithTimestamps(
         uint256[] memory main,
         uint256[] memory a,
         uint256[] memory b,
@@ -257,7 +303,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         uint256 colonIndex = len;
 
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i = 0; i < len; ++i) {
             if (keyBytes[i] == bytes1(":")) {
                 colonIndex = i;
                 break;
@@ -269,20 +315,25 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
 
         bytes memory actionBytes = new bytes(colonIndex);
-        for (uint256 i = 0; i < colonIndex; i++) {
+        for (uint256 i = 0; i < colonIndex; ++i) {
             actionBytes[i] = keyBytes[i];
         }
         actionHash = keccak256(actionBytes);
 
         uint256 assetLen = len - colonIndex - 1;
         bytes memory assetBytes = new bytes(assetLen);
-        for (uint256 i = 0; i < assetLen; i++) {
+        for (uint256 i = 0; i < assetLen; ++i) {
             assetBytes[i] = keyBytes[colonIndex + 1 + i];
         }
         assetKey = string(assetBytes);
     }
 
-    function getValue(string memory key) external view returns (uint128 value, uint128 timestamp) {
+    /// @notice Get a specific value type by parsing the key
+    /// @dev Key format: "action:asset" where action is fairValue/usdValue/numerator/denominator
+    /// @param key The key to parse and query
+    /// @return value The requested value
+    /// @return timestamp The timestamp of the value
+    function getValue(string calldata key) external view returns (uint128 value, uint128 timestamp) {
         (bytes32 actionHash, string memory assetKey) = _parseKey(key);
 
         if (actionHash == bytes32(0)) {
@@ -291,19 +342,19 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         MedianSet memory m = getMedianValues(assetKey);
 
-        if (actionHash == FAIR_VALUE) {
+        if (actionHash == _FAIR_VALUE) {
             return (uint128(m.fairValue), uint128(m.timestamp));
         }
 
-        if (actionHash == USD_VALUE) {
+        if (actionHash == _USD_VALUE) {
             return (uint128(m.usdValue), uint128(m.timestamp));
         }
 
-        if (actionHash == NUMERATOR) {
+        if (actionHash == _NUMERATOR) {
             return (uint128(m.numerator), uint128(m.timestamp));
         }
 
-        if (actionHash == DENOMINATOR) {
+        if (actionHash == _DENOMINATOR) {
             return (uint128(m.denominator), uint128(m.timestamp));
         }
 

@@ -98,7 +98,7 @@ contract ValueStoreTest is Test {
 
     function test_SetValueDivisionByZero() public {
         vm.prank(owner);
-        vm.expectRevert("division by zero");
+        vm.expectRevert(ValueStore.DivisionByZero.selector);
         valueStore.setValue("BTC/USD", 100, 1000, 1, 0);
     }
 
@@ -288,7 +288,7 @@ contract ValueStoreTest is Test {
         denominators[1] = 1;
 
         vm.prank(owner);
-        vm.expectRevert("Array lengths must match");
+        vm.expectRevert(ValueStore.InvalidArrayLengths.selector);
         valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
     }
 
@@ -377,7 +377,7 @@ contract ValueStoreTest is Test {
     }
 
     function test_GetValueNonExistent() public {
-        vm.expectRevert("No data for key");
+        vm.expectRevert(ValueStore.NoDataForKey.selector);
         valueStore.getValue("NONEXISTENT");
     }
 

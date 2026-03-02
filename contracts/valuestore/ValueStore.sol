@@ -8,11 +8,15 @@ import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 
 /// @title ValueStore
 /// @notice Stores fairValue, valueUsd, numerator, denominator per string key
+/// @author DIA (diadata.org)
 /// @dev UUPS upgradeable contract version. Uses reinitializer for future extensibility.
 contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC165 {
     // --- Errors ---
 
     error ZeroAddress();
+    error DivisionByZero();
+    error InvalidArrayLengths();
+    error NoDataForKey();
 
     // --- Value storage ---
 
@@ -24,10 +28,17 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         uint256 timestamp;
     }
 
-    mapping(string => StoredValue) private data;
+    mapping(string => StoredValue) private _data;
 
+    /// @notice Emitted when a value is updated
+    /// @param key The key that was updated
+    /// @param fairValue The new fair value
+    /// @param valueUsd The new USD value
+    /// @param numerator The new numerator
+    /// @param denominator The new denominator
+    /// @param timestamp The timestamp of the update
     event ValueUpdated(
-        string key,
+        string indexed key,
         uint256 fairValue,
         uint256 valueUsd,
         uint256 numerator,
@@ -40,7 +51,7 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     ///
     /// Slot | Label    | Type
     /// ----|----------|--------------------------------------------------
-    ///   0  | data     | mapping(string => struct StoredValue)
+    ///   0  | _data    | mapping(string => struct StoredValue)
     ///   1+ | __gap   | 50 slots reserved for future upgrades
     ///
     /// Note: Parent contract storage (before slot 0):
@@ -67,7 +78,13 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @dev Only callable by contract owner
     /// @param newImplementation Address of the new implementation contract
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
     /// @notice Set the values for a given key (only owner)
+    /// @param key The key to set the value for
+    /// @param fairValue The fair value to store
+    /// @param valueUsd The USD value to store
+    /// @param numerator The numerator to store
+    /// @param denominator The denominator to store
     function setValue(
         string calldata key,
         uint256 fairValue,
@@ -75,9 +92,11 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         uint256 numerator,
         uint256 denominator
     ) external onlyOwner {
-        require(numerator == 0 || denominator != 0, "division by zero");
+        if (numerator != 0 && denominator == 0) {
+            revert DivisionByZero();
+        }
 
-        data[key] = StoredValue({
+        _data[key] = StoredValue({
             fairValue: fairValue,
             valueUsd: valueUsd,
             numerator: numerator,
@@ -89,6 +108,11 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     }
 
     /// @notice Set values for multiple keys at once (only owner)
+    /// @param keys Array of keys to set values for
+    /// @param fairValues Array of fair values to store
+    /// @param valueUsds Array of USD values to store
+    /// @param numerators Array of numerators to store
+    /// @param denominators Array of denominators to store
     function setMultipleValues(
         string[] calldata keys,
         uint256[] calldata fairValues,
@@ -96,18 +120,22 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         uint256[] calldata numerators,
         uint256[] calldata denominators
     ) external onlyOwner {
-        require(
-            keys.length == fairValues.length &&
-                keys.length == valueUsds.length &&
-                keys.length == numerators.length &&
-                keys.length == denominators.length,
-            "Array lengths must match"
-        );
+        uint256 length = keys.length;
+        if (
+            length != fairValues.length ||
+            length != valueUsds.length ||
+            length != numerators.length ||
+            length != denominators.length
+        ) {
+            revert InvalidArrayLengths();
+        }
 
-        for (uint256 i = 0; i < keys.length; i++) {
-            require(numerators[i] == 0 || denominators[i] != 0, "division by zero");
+        for (uint256 i = 0; i < length; ++i) {
+            if (numerators[i] != 0 && denominators[i] == 0) {
+                revert DivisionByZero();
+            }
 
-            data[keys[i]] = StoredValue({
+            _data[keys[i]] = StoredValue({
                 fairValue: fairValues[i],
                 valueUsd: valueUsds[i],
                 numerator: numerators[i],
@@ -120,6 +148,12 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     }
 
     /// @notice Get the stored values for a given key
+    /// @param key The key to retrieve values for
+    /// @return fairValue The stored fair value
+    /// @return valueUsd The stored USD value
+    /// @return numerator The stored numerator
+    /// @return denominator The stored denominator
+    /// @return timestamp The timestamp of the last update
     function getValue(
         string calldata key
     )
@@ -127,13 +161,17 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         view
         returns (uint256 fairValue, uint256 valueUsd, uint256 numerator, uint256 denominator, uint256 timestamp)
     {
-        StoredValue storage sv = data[key];
-        require(sv.timestamp != 0, "No data for key");
+        StoredValue storage sv = _data[key];
+        if (sv.timestamp == 0) {
+            revert NoDataForKey();
+        }
         return (sv.fairValue, sv.valueUsd, sv.numerator, sv.denominator, sv.timestamp);
     }
 
     /// @notice Supports ERC165 interface detection
-    /// @dev Returns true for IERC165 interface and itself
+    /// @dev Returns true for IERC165 interface
+    /// @param interfaceId The interface identifier to check
+    /// @return bool True if the contract supports the interface
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
         return interfaceId == type(IERC165).interfaceId;
     }
