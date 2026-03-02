@@ -173,10 +173,12 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     }
 
     /// @notice Supports ERC165 interface detection
-    /// @dev Returns true for IERC165 interface
+    /// @dev Returns true for IERC165 and IValueStore interfaces
     /// @param interfaceId The interface identifier to check
     /// @return bool True if the contract supports the interface
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IERC165).interfaceId;
+        return
+            interfaceId == type(IERC165).interfaceId ||
+            interfaceId == type(IValueStore).interfaceId;
     }
 }

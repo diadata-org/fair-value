@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {ValueStore} from "../valuestore/ValueStore.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IValueStore} from "../interfaces/IValueStore.sol";
 
 contract ValueStoreTest is Test {
     ValueStore public implementation;
@@ -514,6 +515,10 @@ contract ValueStoreTest is Test {
 
     function test_SupportsInterface_IERC165() public {
         assertTrue(valueStore.supportsInterface(type(IERC165).interfaceId));
+    }
+
+    function test_SupportsInterface_IValueStore() public {
+        assertTrue(valueStore.supportsInterface(type(IValueStore).interfaceId));
     }
 
     function test_SupportsInterface_InvalidInterface() public {
