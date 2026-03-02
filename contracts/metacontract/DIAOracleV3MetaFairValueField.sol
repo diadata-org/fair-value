@@ -30,6 +30,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     bytes32 private constant USD_VALUE = keccak256("usdValue");
     bytes32 private constant NUMERATOR = keccak256("numerator");
     bytes32 private constant DENOMINATOR = keccak256("denominator");
+    uint256 private constant MAX_TIMEOUT_SECONDS = 1 days;
 
     error InvalidThreshold(uint256);
     error InvalidTimeOut(uint256);
@@ -41,6 +42,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     event TimeoutSecondsChanged(uint256 indexed oldTimeoutSeconds, uint256 indexed newTimeoutSeconds);
     event ThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
+    event ValueStoreAdded(address indexed storeAddress, uint256 indexed storeIndex);
+    event ValueStoreRemoved(address indexed storeAddress, uint256 indexed storeIndex);
 
     constructor(address initialOwner) Ownable(initialOwner) {
         if (initialOwner == address(0)) revert ZeroAddress();
@@ -52,6 +55,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             if (valueStores[i] == newStore) revert OracleExists();
         }
         valueStores[numValueStores++] = newStore;
+        emit ValueStoreAdded(newStore, numValueStores - 1);
     }
 
     function removeValueStore(address storeAddr) external onlyOwner {
@@ -60,6 +64,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
                 valueStores[i] = valueStores[numValueStores - 1];
                 delete valueStores[numValueStores - 1];
                 numValueStores--;
+                emit ValueStoreRemoved(storeAddr, i);
                 return;
             }
         }
@@ -77,7 +82,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         if (newTimeoutSeconds == 0) {
             revert InvalidTimeOut(newTimeoutSeconds);
         }
-        if (newTimeoutSeconds > 86400) {
+        if (newTimeoutSeconds > MAX_TIMEOUT_SECONDS) {
             revert TimeoutExceedsLimit(newTimeoutSeconds);
         }
         uint256 oldTimeoutSeconds = timeoutSeconds;
@@ -85,7 +90,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit TimeoutSecondsChanged(oldTimeoutSeconds, newTimeoutSeconds);
     }
 
-    function getMedianValues(string memory key) external view returns (MedianSet memory) {
+    function getMedianValues(string memory key) external view returns (MedianSet memory median) {
         (
             uint256[] memory fairValues,
             uint256[] memory usdValues,
@@ -275,7 +280,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         assetKey = string(assetBytes);
     }
 
-    function getValue(string memory key) external view returns (uint128, uint128) {
+    function getValue(string memory key) external view returns (uint128 value, uint128 timestamp) {
         (bytes32 actionHash, string memory assetKey) = _parseKey(key);
 
         if (actionHash == bytes32(0)) {
