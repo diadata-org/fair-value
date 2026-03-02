@@ -90,7 +90,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit TimeoutSecondsChanged(oldTimeoutSeconds, newTimeoutSeconds);
     }
 
-    function getMedianValues(string memory key) external view returns (MedianSet memory median) {
+    function getMedianValues(string memory key) public view returns (MedianSet memory median) {
         (
             uint256[] memory fairValues,
             uint256[] memory usdValues,
@@ -287,7 +287,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             return (uint128(0), uint128(0));
         }
 
-        MedianSet memory m = this.getMedianValues(assetKey);
+        MedianSet memory m = getMedianValues(assetKey);
 
         if (actionHash == FAIR_VALUE) {
             return (uint128(m.fairValue), uint128(m.timestamp));
