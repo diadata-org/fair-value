@@ -11,10 +11,12 @@
     "test:coverage": "forge coverage --contracts 'contracts/**/*.sol'",
     "prettier": "npx prettier --write --plugin=prettier-plugin-solidity 'contracts/**/*.sol'",
     "prettier:check": "npx prettier --check --plugin=prettier-plugin-solidity 'contracts/**/*.sol'",
-    "lint": "npm run lint:sol",
+    "lint": "npm run lint:sol && npm run slither",
     "lint:fix": "npm run prettier && npm run lint:sol:fix",
     "lint:sol": "solhint 'contracts/**/*.sol'",
-    "lint:sol:fix": "solhint 'contracts/**/*.sol' --fix"
+    "lint:sol:fix": "solhint 'contracts/**/*.sol' --fix",
+    "slither": "slither . --filter-paths 'node_modules|lib|test|script|scripts'",
+    "slither:json": "slither . --filter-paths 'node_modules|lib|test|script|scripts' --json output/slither-report.json"
   },
   "repository": {
     "type": "git",

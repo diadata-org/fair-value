@@ -5,12 +5,13 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IValueStore} from "../interfaces/IValueStore.sol";
 
 /// @title ValueStore
 /// @notice Stores fairValue, valueUsd, numerator, denominator per string key
 /// @author DIA (diadata.org)
 /// @dev UUPS upgradeable contract version. Uses reinitializer for future extensibility.
-contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC165 {
+contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC165, IValueStore {
     // --- Errors ---
 
     error ZeroAddress();
@@ -30,6 +31,7 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
 
     mapping(string => StoredValue) private _data;
 
+    /* solhint-disable gas-indexed-events */
     /// @notice Emitted when a value is updated
     /// @param key The key that was updated
     /// @param fairValue The new fair value
@@ -43,8 +45,9 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         uint256 valueUsd,
         uint256 numerator,
         uint256 denominator,
-        uint256 timestamp
+        uint256 indexed timestamp
     );
+    /* solhint-enable gas-indexed-events */
 
     /// @notice Storage gap for future upgrades (50 slots)
     /// @dev Storage slots from forge build --extra-output storageLayout:
@@ -77,6 +80,7 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @notice Authorizes upgrade to new implementation
     /// @dev Only callable by contract owner
     /// @param newImplementation Address of the new implementation contract
+    // solhint-disable-next-line no-empty-blocks
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /// @notice Set the values for a given key (only owner)
