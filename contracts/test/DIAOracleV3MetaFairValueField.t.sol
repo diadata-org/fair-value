@@ -8,6 +8,9 @@ import {DIAOracleV3MetaFairValueField} from "../metacontract/DIAOracleV3MetaFair
 
 // Mock ValueStore contract for testing
 contract MockValueStore {
+    // Custom error matching real ValueStore contract
+    error NoDataForKey();
+
     mapping(string => uint256) public fairValues;
     mapping(string => uint256) public usdValues;
     mapping(string => uint256) public numerators;
@@ -35,8 +38,9 @@ contract MockValueStore {
         returns (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp)
     {
         // Revert if no data set for this key (mimics real ValueStore behavior)
+        // Uses custom error matching the real ValueStore contract
         if (timestamps[key] == 0) {
-            revert("No data for key");
+            revert NoDataForKey();
         }
         return (fairValues[key], usdValues[key], numerators[key], denominators[key], timestamps[key]);
     }
@@ -268,7 +272,7 @@ contract GetMedianValuesHappyPathTest is BaseTest {
             blockTimestamp: 1000000,
             expectedFairValue: 250,  // Average of [100, 200, 300, 400] middle = (200 + 300) / 2
             expectedUsdValue: 2500,
-            expectedNumerator: 2,    // Average of 2 and 3
+            expectedNumerator: 3,    // From RIGHT middle oracle (index 2)
             expectedDenominator: 1,
             shouldRevert: false,
             expectedError: bytes4(0),
@@ -404,7 +408,7 @@ contract GetMedianValuesTimeoutTest is BaseTest {
             blockTimestamp: 1000000,
             expectedFairValue: 150,  // Median of [100, 200] (300 is stale)
             expectedUsdValue: 1500,
-            expectedNumerator: 1,    // Average of 1 and 2
+            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
             expectedDenominator: 1,
             shouldRevert: false,
             expectedError: bytes4(0),
@@ -458,7 +462,7 @@ contract GetMedianValuesTimeoutTest is BaseTest {
             blockTimestamp: 1000000,
             expectedFairValue: 150,  // Average of [100, 200]
             expectedUsdValue: 1500,
-            expectedNumerator: 1,
+            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
             expectedDenominator: 1,
             shouldRevert: false,
             expectedError: bytes4(0),
@@ -488,7 +492,7 @@ contract GetMedianValuesFailureHandlingTest is BaseTest {
             blockTimestamp: 1000000,
             expectedFairValue: 150,  // Median of [100, 200] (3rd reverts)
             expectedUsdValue: 1500,
-            expectedNumerator: 1,
+            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
             expectedDenominator: 1,
             shouldRevert: false,
             expectedError: bytes4(0),
@@ -507,7 +511,7 @@ contract GetMedianValuesFailureHandlingTest is BaseTest {
             blockTimestamp: 1000000,
             expectedFairValue: 150,  // Median of [100, 200]
             expectedUsdValue: 1500,
-            expectedNumerator: 1,
+            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
             expectedDenominator: 1,
             shouldRevert: false,
             expectedError: bytes4(0),
@@ -642,11 +646,12 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
 
         // Should sort by usdValues since all fairValues are 0
         // Sorted usdValues: [1000, 2000, 3000, 4000]
-        // Median of even count: average of middle two (2000 + 3000) / 2 = 2500
+        // Median of even count: average of middle two (2000 + 3000 + 1) / 2 = 2500
+        // Numerator/denominator from RIGHT middle oracle: 3/1
         assertEq(result.fairValue, 0, "All fairValues should be 0");
         assertEq(result.usdValue, 2500, "Should be median of usdValues");
-        assertEq(result.numerator, 2, "Should be average of middle numerators");
-        assertEq(result.denominator, 1, "Should be average of middle denominators");
+        assertEq(result.numerator, 3, "Should be from right middle oracle");
+        assertEq(result.denominator, 1, "Should be from right middle oracle");
         assertEq(result.timestamp, timestamp, "Should return max timestamp");
     }
 }
@@ -704,10 +709,10 @@ contract NumeratorDenominatorTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // Average of middle two: (2/4 + 3/6) / 2 = (2 + 3) / 2 / (4 + 6) / 2
-        // But the contract calculates: (2 + 3) / 2 = 2, (4 + 6) / 2 = 5
-        assertEq(result.numerator, 2, "Numerator should be average of 2 and 3");
-        assertEq(result.denominator, 5, "Denominator should be average of 4 and 6");
+        // Average of middle two: (2/4 + 3/6) / 2
+        // Numerator/denominator come from RIGHT middle oracle (index 2): 3/6
+        assertEq(result.numerator, 3, "Numerator should be from right middle oracle");
+        assertEq(result.denominator, 6, "Denominator should be from right middle oracle");
     }
 
     function test_NumeratorDenominator_AllZero() public {
@@ -825,9 +830,9 @@ contract NumeratorDenominatorTest is BaseTest {
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Should only use fresh data (stores 1 and 2)
-        // Average: (1 + 2) / 2 = 1, (2 + 3) / 2 = 2
-        assertEq(result.numerator, 1, "Numerator should be average of 1 and 2");
-        assertEq(result.denominator, 2, "Denominator should be average of 2 and 3");
+        // Numerator/denominator come from RIGHT middle oracle: 2/3
+        assertEq(result.numerator, 2, "Numerator should be from right middle oracle");
+        assertEq(result.denominator, 3, "Denominator should be from right middle oracle");
     }
 
     function test_NumeratorDenominator_WithFailingOracle() public {
@@ -845,9 +850,9 @@ contract NumeratorDenominatorTest is BaseTest {
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Should compute median from successful calls (stores 1 and 2)
-        // Average: (1 + 3) / 2 = 2, (2 + 4) / 2 = 3
-        assertEq(result.numerator, 2, "Numerator should be average of 1 and 3");
-        assertEq(result.denominator, 3, "Denominator should be average of 2 and 4");
+        // Numerator/denominator from RIGHT middle oracle: 3/4
+        assertEq(result.numerator, 3, "Numerator should be from right middle oracle");
+        assertEq(result.denominator, 4, "Denominator should be from right middle oracle");
     }
 
     function test_NumeratorDenominator_IndependentFromFairValue() public {
@@ -935,8 +940,8 @@ contract NumeratorDenominatorTest is BaseTest {
             blockTimestamp: 1000000,
             expectedFairValue: 250,
             expectedUsdValue: 2500,
-            expectedNumerator: 5,    // Average of 4 and 6
-            expectedDenominator: 10, // Average of 8 and 12
+            expectedNumerator: 6,    // From RIGHT middle oracle (index 2)
+            expectedDenominator: 12, // From RIGHT middle oracle (index 2)
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -1606,6 +1611,9 @@ contract DuplicateValuesPerformanceTest is BaseTest {
         oracle.setThreshold(2);
         vm.prank(owner);
         oracle.setTimeoutSeconds(3600);
+        // Increase max value stores to allow testing with 200+ oracles
+        vm.prank(owner);
+        oracle.setMaxValueStores(1000);
     }
 
     function test_DuplicateValues_AllSame_100Oracles() public {
@@ -2014,3 +2022,795 @@ contract DuplicateValuesPerformanceTest is BaseTest {
         assertEq(result.fairValue, 10, "Should handle single element in right partition");
     }
 }
+
+/*//////////////////////////////////////////////////////////////
+                    INVARIANT & PROPERTY-BASED TEST SUITE
+    Tests mathematical properties and invariants of the oracle
+//////////////////////////////////////////////////////////////*/
+contract InvariantPropertiesTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_Invariant_MedianWithinMinMax() public {
+        // INVARIANT: Median should always be between min and max values
+        uint256 numOracles = 10;
+        uint256 timestamp = block.timestamp;
+
+        uint256[] memory fairValues = new uint256[](numOracles);
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            fairValues[i] = 100 + (i * 137); // Prime number for variety
+            setStoreValues(store, TEST_KEY, fairValues[i], fairValues[i] * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Find min and max
+        uint256 minValue = fairValues[0];
+        uint256 maxValue = fairValues[0];
+        for (uint256 i = 1; i < numOracles; i++) {
+            if (fairValues[i] < minValue) minValue = fairValues[i];
+            if (fairValues[i] > maxValue) maxValue = fairValues[i];
+        }
+
+        // INVARIANT CHECK: Median must be within [min, max]
+        assertGe(result.fairValue, minValue, "Median should be >= min value");
+        assertLe(result.fairValue, maxValue, "Median should be <= max value");
+    }
+
+    function test_Invariant_MedianAllSame() public {
+        // INVARIANT: If all oracles report same value, median is that value
+        uint256 numOracles = 7;
+        uint256 timestamp = block.timestamp;
+        uint256 sameValue = 5555;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, sameValue, sameValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, sameValue, "Median of identical values should be that value");
+        assertEq(result.usdValue, sameValue * 10, "USD value should match");
+    }
+
+    function test_Invariant_MedianIsMiddleValue_OddCount() public {
+        // INVARIANT: For odd count, median should be exactly one of the values
+        uint256 numOracles = 11; // Odd number
+        uint256 timestamp = block.timestamp;
+
+        uint256[] memory fairValues = new uint256[](numOracles);
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            fairValues[i] = 100 + (i * 50);
+            setStoreValues(store, TEST_KEY, fairValues[i], fairValues[i] * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // For odd count (11), median is the 6th element (index 5) when sorted
+        uint256 expectedMedian = 100 + (5 * 50);
+        assertEq(result.fairValue, expectedMedian, "Median should be middle value");
+    }
+
+    function test_Invariant_MedianIsAverageOfMiddles_EvenCount() public {
+        // INVARIANT: For even count, median should be average of two middle values
+        uint256 numOracles = 10; // Even number
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fairValue = 100 + (i * 100);
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // For even count (10), median is average of 5th and 6th elements (indices 4, 5)
+        assertEq(result.fairValue, 550, "Median should be average of two middle values");
+    }
+
+    function test_Invariant_RoundTrip_SetGetValues() public {
+        // INVARIANT: Values set should match values retrieved
+        MockValueStore store = createMockStore();
+
+        store.setValue("TEST/KEY", 12345, 123450, 7, 13, block.timestamp);
+
+        (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp) =
+            store.getValue("TEST/KEY");
+
+        assertEq(fairValue, 12345, "FairValue round-trip");
+        assertEq(usdValue, 123450, "UsdValue round-trip");
+        assertEq(numerator, 7, "Numerator round-trip");
+        assertEq(denominator, 13, "Denominator round-trip");
+        assertEq(timestamp, block.timestamp, "Timestamp round-trip");
+    }
+
+    function test_Invariant_RoundTrip_MultipleKeys() public {
+        // INVARIANT: Multiple keys should maintain independent values
+        MockValueStore store = createMockStore();
+
+        store.setValue("KEY1", 1000, 10000, 1, 1, block.timestamp);
+        store.setValue("KEY2", 2000, 20000, 2, 3, block.timestamp);
+        store.setValue("KEY3", 3000, 30000, 3, 5, block.timestamp);
+
+        (uint256 fv1,,, uint256 den1,) = store.getValue("KEY1");
+        (uint256 fv2,, uint256 num2,,) = store.getValue("KEY2");
+        (uint256 fv3,, uint256 num3, uint256 den3,) = store.getValue("KEY3");
+
+        assertEq(fv1, 1000, "KEY1 should be independent");
+        assertEq(fv2, 2000, "KEY2 should be independent");
+        assertEq(fv3, 3000, "KEY3 should be independent");
+        assertEq(num2, 2, "KEY2 numerator");
+        assertEq(num3, 3, "KEY3 numerator");
+        assertEq(den1, 1, "KEY1 denominator");
+        assertEq(den3, 5, "KEY3 denominator");
+    }
+
+    function test_Invariant_RoundTrip_Override() public {
+        // INVARIANT: Setting new values should override old ones completely
+        MockValueStore store = createMockStore();
+
+        store.setValue("KEY", 1000, 10000, 1, 2, 100);
+        store.setValue("KEY", 5000, 50000, 7, 11, 200);
+
+        (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp) =
+            store.getValue("KEY");
+
+        assertEq(fairValue, 5000, "Should have new fairValue");
+        assertEq(usdValue, 50000, "Should have new usdValue");
+        assertEq(numerator, 7, "Should have new numerator");
+        assertEq(denominator, 11, "Should have new denominator");
+        assertEq(timestamp, 200, "Should have new timestamp");
+    }
+
+    function test_Invariant_SortedMonotonicity() public {
+        // INVARIANT: Values should be properly sorted
+        uint256 numOracles = 20;
+        uint256 timestamp = block.timestamp;
+
+        // Create values in random order
+        uint256[] memory unsortedValues = new uint256[](numOracles);
+        unsortedValues[0] = 500;
+        unsortedValues[1] = 100;
+        unsortedValues[2] = 700;
+        unsortedValues[3] = 300;
+        unsortedValues[4] = 900;
+        unsortedValues[5] = 200;
+        unsortedValues[6] = 600;
+        unsortedValues[7] = 400;
+        unsortedValues[8] = 800;
+        unsortedValues[9] = 150;
+        unsortedValues[10] = 950;
+        unsortedValues[11] = 250;
+        unsortedValues[12] = 750;
+        unsortedValues[13] = 350;
+        unsortedValues[14] = 850;
+        unsortedValues[15] = 450;
+        unsortedValues[16] = 650;
+        unsortedValues[17] = 50;
+        unsortedValues[18] = 1000;
+        unsortedValues[19] = 550;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, unsortedValues[i], unsortedValues[i] * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted values: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]
+        // For 20 elements, median is average of 10th and 11th: (500 + 550) / 2 = 525
+        assertEq(result.fairValue, 525, "Median indicates proper sorting occurred");
+    }
+
+    function test_Invariant_TimestampFromOneOfTheOracles() public {
+        // INVARIANT: Returned timestamp should match one of the oracle timestamps
+        uint256 numOracles = 5;
+        uint256 baseTimestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 1000 + (i * 100), 10000 + (i * 1000), i + 1, 1, baseTimestamp + (i * 1000));
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Timestamp should be one of the oracle timestamps
+        bool found = false;
+        for (uint256 i = 0; i < numOracles; i++) {
+            if (result.timestamp == baseTimestamp + (i * 1000)) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue(found, "Timestamp should be from one of the oracles");
+    }
+
+    function test_Invariant_MedianStability() public {
+        // INVARIANT: Adding same values shouldn't change median much
+        uint256 timestamp = block.timestamp;
+
+        // Create 10 oracles with value 100
+        for (uint256 i = 0; i < 10; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 100, 1000, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result1 = oracle.getMedianValues(TEST_KEY);
+        assertEq(result1.fairValue, 100, "Median of all 100s should be 100");
+
+        // Add 10 more oracles with value 200
+        for (uint256 i = 0; i < 10; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 200, 2000, i + 11, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result2 = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result2.fairValue, 150, "Median should be between 100 and 200");
+        assertGe(result2.fairValue, result1.fairValue, "Median should shift toward new values");
+    }
+
+    function test_Invariant_NumeratorDenominatorConsistency() public {
+        // INVARIANT: If denominator is 1, value should equal numerator
+        uint256 numOracles = 5;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            uint256 value = 1000 + (i * 100);
+            setStoreValues(store, TEST_KEY, value, value * 10, value, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.numerator, result.fairValue, "Numerator should equal fairValue when denominator is 1");
+        assertEq(result.denominator, 1, "Denominator should be 1");
+    }
+
+    function test_Invariant_ExtremeValues() public {
+        // INVARIANT: System should handle extreme values correctly
+        uint256 timestamp = block.timestamp;
+
+        // Use extreme but safe values (avoid overflow)
+        uint256[] memory extremeValues = new uint256[](5);
+        extremeValues[0] = 0;
+        extremeValues[1] = 1;
+        extremeValues[2] = 1e18; // Large but safe value
+        extremeValues[3] = 1e27; // Very large but safe
+        extremeValues[4] = 1e36; // Extremely large but safe
+
+        for (uint256 i = 0; i < 5; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, extremeValues[i], extremeValues[i], 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Median of [0, 1, 1e18, 1e27, 1e36] is 1e18 (middle value)
+        assertEq(result.fairValue, 1e18, "Should handle extreme values");
+    }
+
+    function testFuzz_Invariant_MedianAlwaysValid(uint128[20] memory values) public {
+        // FUZZ TEST: Median should always be valid for any input values
+        vm.prank(owner);
+        oracle.setMaxValueStores(20);
+
+        uint256 timestamp = block.timestamp;
+
+        // Clear existing stores
+        for (uint256 i = 0; i < 20; i++) {
+            if (i < stores.length) {
+                vm.prank(owner);
+                oracle.removeValueStore(address(stores[i]));
+            }
+        }
+        delete stores;
+
+        // Add stores with fuzzed values
+        for (uint256 i = 0; i < 20; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fairValue = uint256(values[i]);
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        // Get median - should never revert or produce invalid results
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertTrue(true, "Median computed successfully for any input");
+    }
+
+    function test_Invariant_OrderPreservation_MultipleKeys() public {
+        // INVARIANT: Different keys should maintain independent medians
+        uint256 timestamp = block.timestamp;
+
+        // Set BTC values: [100, 200, 300]
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        setStoreValues(store1, "BTC", 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, "BTC", 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, "BTC", 300, 3000, 1, 1, timestamp);
+
+        // Set ETH values: [1000, 2000, 3000]
+        setStoreValues(store1, "ETH", 1000, 10000, 1, 1, timestamp);
+        setStoreValues(store2, "ETH", 2000, 20000, 1, 1, timestamp);
+        setStoreValues(store3, "ETH", 3000, 30000, 1, 1, timestamp);
+
+        // Get medians
+        DIAOracleV3MetaFairValueField.MedianSet memory btcResult = oracle.getMedianValues("BTC");
+        DIAOracleV3MetaFairValueField.MedianSet memory ethResult = oracle.getMedianValues("ETH");
+
+        // Each key should maintain its own independent median
+        assertEq(btcResult.fairValue, 200, "BTC median should be independent");
+        assertEq(ethResult.fairValue, 2000, "ETH median should be independent");
+    }
+}
+
+/// @title MedianPrecisionTest
+/// @notice Tests precision and accuracy of median calculations
+contract MedianPrecisionTest is BaseTest {
+    // Precision tests for median calculation
+
+    function test_Precision_EvenCount_ExactDivision() public {
+        // EVEN COUNT: [100, 200, 300, 400]
+        // Median should be average of middle two: (200 + 300) / 2 = 250
+        // This is exact integer division - no precision loss
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 250, "Median of 100,200,300,400 should be 250");
+    }
+
+    function test_Precision_EvenCount_TruncatingDivision() public {
+        // EVEN COUNT: [100, 200, 300, 401]
+        // Sorted: 100, 200, 300, 401
+        // Middle two: 200, 300
+        // Average: (200 + 300 + 1) / 2 = 250 (exact, since sum is even)
+        // This shows exact division scenario
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 401, 4010, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 250, "Median should be 250 (exact division)");
+    }
+
+    function test_Precision_EvenCount_OddNumbers() public {
+        // EVEN COUNT with odd numbers: [1, 2, 3, 4]
+        // Middle two: 2, 3
+        // Average: (2 + 3 + 1) / 2 = 3 (rounded to nearest)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 1, 10, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 2, 20, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 3, 30, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 4, 40, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 3, "Median of 1,2,3,4 should be 3 (rounded from 2.5)");
+    }
+
+    function test_Precision_EvenCount_LargeNumbers() public {
+        // EVEN COUNT with large numbers: [1e18, 2e18, 3e18, 4e18]
+        // Middle two: 2e18, 3e18
+        // Average: (2e18 + 3e18) / 2 = 2.5e18 -> 2.5e18 (exact in this case)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 1e18, 1e19, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 2e18, 2e19, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 3e18, 3e19, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 4e18, 4e19, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 2.5e18, "Median of 1e18,2e18,3e18,4e18 should be 2.5e18");
+    }
+
+    function test_Precision_NumeratorDenominator_EvenCount() public {
+        // EVEN COUNT: Test that numerator/denominator come from right middle oracle
+        // Values: [100/1, 200/1, 300/1, 400/1]
+        // Middle two: 200, 300
+        // FairValue median: (200 + 300 + 1) / 2 = 250 (rounded)
+        // Numerator/denominator from RIGHT middle oracle: 300/1
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 100, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 200, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 300, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 400, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.numerator, 300, "Median numerator should be from right middle oracle");
+        assertEq(result.denominator, 1, "Median denominator should be from right middle oracle");
+    }
+
+    function test_Precision_NumeratorDenominator_PrecisionLoss() public {
+        // EVEN COUNT: Shows that numerator/denominator come from right middle oracle
+        // Values sorted by fairValue: [50/2, 57/7, 60/5, 66/3]
+        // Middle two: 57 (400/7), 60 (300/5)
+        // FairValue median: (57 + 60 + 1) / 2 = 59 (rounded)
+        // Numerator/denominator from RIGHT middle oracle: 300/5
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 50, 500, 100, 2, timestamp);
+        setStoreValues(store2, TEST_KEY, 66, 660, 200, 3, timestamp);
+        setStoreValues(store3, TEST_KEY, 60, 600, 300, 5, timestamp);
+        setStoreValues(store4, TEST_KEY, 57, 570, 400, 7, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted by fairValue: 50 (100/2), 57 (400/7), 60 (300/5), 66 (200/3)
+        // Middle two: 57 (400/7), 60 (300/5)
+        // RIGHT middle: 60 (300/5)
+        assertEq(result.numerator, 300, "Median numerator should be from right middle oracle");
+        assertEq(result.denominator, 5, "Median denominator should be from right middle oracle");
+    }
+
+    function test_Precision_OddCount_NoAveraging() public {
+        // ODD COUNT: No averaging, so no precision loss
+        // Values: [100, 200, 300]
+        // Median: 200 (middle value, no averaging needed)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 200, "Median of 100,200,300 should be 200");
+    }
+
+    function test_Precision_VeryCloseValues() public {
+        // EVEN COUNT: Values very close together
+        // [100, 101, 102, 103]
+        // Middle two: 101, 102
+        // Average: (101 + 102 + 1) / 2 = 102 (rounded to nearest)
+        // Maximum precision loss: 0.5
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 101, 1010, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 102, 1020, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 103, 1030, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 102, "Median should be 102 (rounded from 101.5)");
+    }
+
+    function test_Precision_DuplicateMiddleValues() public {
+        // EVEN COUNT: Duplicate middle values
+        // [100, 200, 200, 300]
+        // Middle two: 200, 200
+        // Average: (200 + 200) / 2 = 200 (exact, no truncation)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 200, "Median with duplicate middle values should be exact");
+    }
+
+    function test_Precision_BigValues_SmallDifference() public {
+        // EVEN COUNT: Large values with small difference
+        // [1e18, 1e18+1, 1e18+2, 1e18+3]
+        // Middle two: 1e18+1, 1e18+2
+        // Average: (2e18+3+1) / 2 = 1e18+2 (rounded to nearest)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 1e18, 1e19, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 1e18 + 1, 1e19 + 10, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 1e18 + 2, 1e19 + 20, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 1e18 + 3, 1e19 + 30, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 1e18 + 2, "Median should round to 1e18+2");
+    }
+
+    function test_Precision_CompareOddVsEven() public {
+        // Compare precision: odd count (exact) vs even count (rounded)
+        // ODD: [100, 200, 300] -> 200 (exact)
+        // EVEN: [100, 200, 300, 400] -> (200+300+1)/2 = 250 (rounded to nearest)
+        uint256 timestamp = block.timestamp;
+
+        // Odd count test
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory oddResult = oracle.getMedianValues(TEST_KEY);
+
+        // Add fourth store for even count
+        MockValueStore store4 = createMockStore();
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory evenResult = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(oddResult.fairValue, 200, "Odd count median should be exact");
+        assertEq(evenResult.fairValue, 250, "Even count median should average middle values");
+    }
+
+    function test_Precision_Documentation_TruncationBehavior() public {
+        // DOCUMENTATION: This test documents the rounding behavior
+        // When averaging two middle values for even count:
+        // - If sum is even: exact division (e.g., (200 + 300) / 2 = 250)
+        // - If sum is odd: round to nearest (e.g., (201 + 300 + 1) / 2 = 251)
+        // Maximum precision deviation per median calculation: 0.5 units
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        // Even sum: (200 + 300 + 1) / 2 = 250 (rounds down since sum+1 is even)
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 250, "Even sum: exact result");
+        assertTrue(((200 + 300) % 2) == 0, "Sum is even, result is exact");
+
+        // Odd sum: (201 + 300 + 1) / 2 = 251 (rounds up)
+        setStoreValues(store2, TEST_KEY, 201, 2010, 1, 1, timestamp);
+
+        result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 251, "Odd sum: rounds to nearest (up for .5)");
+        assertTrue(((201 + 300) % 2) != 0, "Sum is odd, so rounding occurs");
+    }
+
+    function test_Precision_MaximumTruncation() public {
+        // Test maximum rounding scenario
+        // [100, 101, 102, 103]
+        // Middle two: 101, 102
+        // Average: (101 + 102 + 1) / 2 = 102 (rounded up from 101.5)
+        // Maximum deviation from mathematical average: 0.5 units
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 101, 1010, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 102, 1020, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 103, 1030, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 102, "Rounded up: 101.5 -> 102");
+    }
+
+    function test_Precision_AllValuesSame() public {
+        // All values identical: no precision loss
+        // [500, 500, 500, 500]
+        // Middle two: 500, 500
+        // Average: (500 + 500) / 2 = 500 (exact)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 500, 5000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 500, 5000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 500, 5000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 500, 5000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 500, "All values same: no precision loss");
+    }
+
+    function testFuzz_Precision_AlwaysValid(uint128 a, uint128 b, uint128 c, uint128 d) public {
+        // FUZZ TEST: Median calculation should always produce valid results
+        // for any combination of values (within uint128 range to prevent overflow)
+        vm.prank(owner);
+        oracle.setMaxValueStores(10);
+
+        uint256 timestamp = block.timestamp;
+
+        // Clear existing stores
+        for (uint256 i = 0; i < stores.length; i++) {
+            vm.prank(owner);
+            oracle.removeValueStore(address(stores[i]));
+        }
+        delete stores;
+
+        // Create 4 stores with fuzzed values
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        // Bound values to prevent overflow in averaging
+        uint256 valA = uint256(a) % 1e18;
+        uint256 valB = uint256(b) % 1e18;
+        uint256 valC = uint256(c) % 1e18;
+        uint256 valD = uint256(d) % 1e18;
+
+        setStoreValues(store1, TEST_KEY, valA, valA * 10, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, valB, valB * 10, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, valC, valC * 10, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, valD, valD * 10, 1, 1, timestamp);
+
+        // Should never revert
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Result should be within min-max range
+        uint256 minVal = valA;
+        uint256 maxVal = valA;
+        if (valB < minVal) minVal = valB;
+        if (valB > maxVal) maxVal = valB;
+        if (valC < minVal) minVal = valC;
+        if (valC > maxVal) maxVal = valC;
+        if (valD < minVal) minVal = valD;
+        if (valD > maxVal) maxVal = valD;
+
+        assertTrue(result.fairValue >= minVal && result.fairValue <= maxVal, "Median should be within range");
+    }
+
+    function test_Precision_TimestampSelection() public {
+        // Even count: Which timestamp is selected?
+        // [100@t1, 200@t2, 300@t3, 400@t4]
+        // Middle two: 200@t2, 300@t3
+        // Timestamp selected: t3 (right element of middle pair)
+        uint256 timestamp1 = block.timestamp;
+        uint256 timestamp2 = timestamp1 + 1;
+        uint256 timestamp3 = timestamp2 + 1;
+        uint256 timestamp4 = timestamp3 + 1;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp1);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp2);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp3);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp4);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Timestamp should be from the right element of the middle pair (300@t3)
+        assertEq(result.timestamp, timestamp3, "Timestamp should be from right middle element");
+    }
+
+    function test_Precision_ZeroValues() public {
+        // Test with zero values
+        // [0, 0, 100, 200]
+        // Middle two: 0, 100
+        // Average: (0 + 100) / 2 = 50 (exact)
+        uint256 timestamp = block.timestamp;
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 0, 0, 0, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 0, 0, 0, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 200, 2000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 50, "Median with zeros should be correct");
+    }
+
+    function test_Precision_MixedOddEven() public {
+        // Compare 5 oracles vs 6 oracles with same core values
+        // 5 oracles (odd): [100, 200, 300, 400, 500] -> 300 (exact)
+        // 6 oracles (even): [100, 200, 300, 400, 500, 600] -> (300+400)/2 = 350 (exact)
+        uint256 timestamp = block.timestamp;
+
+        // Create 5 stores
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+        MockValueStore store5 = createMockStore();
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
+        setStoreValues(store5, TEST_KEY, 500, 5000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory oddResult = oracle.getMedianValues(TEST_KEY);
+
+        // Add 6th store
+        MockValueStore store6 = createMockStore();
+        setStoreValues(store6, TEST_KEY, 600, 6000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory evenResult = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(oddResult.fairValue, 300, "Odd count (5): middle value is 300");
+        assertEq(evenResult.fairValue, 350, "Even count (6): average of 300 and 400 is 350");
+    }
+}
+

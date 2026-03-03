@@ -253,10 +253,19 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         } else {
             uint256 mid1 = (count / 2) - 1;
             uint256 mid2 = count / 2;
-            fairValue = (fairValues[mid1] + fairValues[mid2]) / 2;
-            usdValue = (usdValues[mid1] + usdValues[mid2]) / 2;
-            numerator = (nums[mid1] + nums[mid2]) / 2;
-            denominator = (dens[mid1] + dens[mid2]) / 2;
+            // Round to nearest by adding 1 before dividing: (a + b + 1) / 2
+            // This gives proper rounding: 2.5 → 3, 2.4 → 2
+            uint256 sumFair = fairValues[mid1] + fairValues[mid2];
+            fairValue = (sumFair + 1) / 2;
+
+            uint256 sumUsd = usdValues[mid1] + usdValues[mid2];
+            usdValue = (sumUsd + 1) / 2;
+
+            // Take numerator/denominator from the RIGHT middle oracle
+            // This ensures consistency - all data comes from the same oracle
+            numerator = nums[mid2];
+            denominator = dens[mid2];
+
             medianTimestamp = timestamps[mid2];
         }
 
