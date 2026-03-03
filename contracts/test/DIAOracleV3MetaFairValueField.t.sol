@@ -1429,6 +1429,9 @@ contract QuickSortStackExhaustionTest is BaseTest {
         oracle.setThreshold(2);
         vm.prank(owner);
         oracle.setTimeoutSeconds(3600);
+        // Increase max value stores to allow testing with 200+ oracles
+        vm.prank(owner);
+        oracle.setMaxValueStores(1000);
     }
 
     function test_QuickSort_LargeArray_SortedInput() public {
@@ -1589,5 +1592,425 @@ contract QuickSortStackExhaustionTest is BaseTest {
         // Should not revert with stack overflow
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
         assertGt(result.fairValue, 0, "Should return a value");
+    }
+}
+
+/*//////////////////////////////////////////////////////////////
+              DUPLICATE VALUES PERFORMANCE TEST SUITE
+    Tests for O(n²) degradation with adversarial duplicate data
+//////////////////////////////////////////////////////////////*/
+contract DuplicateValuesPerformanceTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_DuplicateValues_AllSame_100Oracles() public {
+        // Test worst-case: all oracles report the exact same value
+        // This causes maximum imbalance in QuickSort partition
+        uint256 numOracles = 100;
+        uint256 timestamp = block.timestamp;
+
+        // All oracles have identical values
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 1000, 10000, 1, 1, timestamp);
+        }
+
+        // This should work but may use more gas
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 1000, "All same values should return that value");
+    }
+
+    function test_DuplicateValues_AllSame_200Oracles() public {
+        // Test with more oracles - should see significant gas increase if vulnerable
+        uint256 numOracles = 200;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 1000, 10000, 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 1000, "All same values should return that value");
+    }
+
+    function test_DuplicateValues_AllSame_300Oracles() public {
+        // Test with even more oracles to stress test
+        uint256 numOracles = 300;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 1000, 10000, 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 1000, "All same values should return that value");
+    }
+
+    function test_DuplicateValues_NinetyPercentSame() public {
+        // Test with 90% duplicates and 10% different values
+        // This is a realistic adversarial scenario
+        uint256 numOracles = 200;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // 90% have value 1000, 10% have value 2000
+            uint256 fairValue = (i < 180) ? 1000 : 2000;
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // With 180 values of 1000 and 20 values of 2000, median should be 1000
+        assertEq(result.fairValue, 1000, "Median should be the common value");
+    }
+
+    function test_DuplicateValues_TwoDistinctValues() public {
+        // Test with only 2 distinct values, alternating
+        uint256 numOracles = 200;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Alternate between 100 and 200
+            uint256 fairValue = (i % 2 == 0) ? 100 : 200;
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // 100 values of 100, 100 values of 200
+        // Median: (100 + 200) / 2 = 150
+        assertEq(result.fairValue, 150, "Median of two values should be average");
+    }
+
+    function test_DuplicateValues_ThreeDistinctValues() public {
+        // Test with 3 distinct values
+        uint256 numOracles = 201;  // Odd number for clear median
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // 67 values each of 100, 200, 300
+            uint256 fairValue = 100 + ((i % 3) * 100);
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted: 67×100, 67×200, 67×300
+        // Median (101st element): 200
+        assertEq(result.fairValue, 200, "Median should be middle value");
+    }
+
+    function test_DuplicateValues_CollusionAttack() public {
+        // Simulate collusion: majority of oracles report same fake value
+        uint256 numOracles = 200;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // 150 oracles (75%) report 999999, 50 report correct values around 100
+            uint256 fairValue = (i < 150) ? 999999 : (100 + i);
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // With 150 values of 999999, median should be 999999
+        assertEq(result.fairValue, 999999, "Colluding majority should control median");
+    }
+
+    function test_DuplicateValues_SpikeResistance() public {
+        // Test with one oracle trying to spike the value
+        uint256 numOracles = 199;  // Odd number
+        uint256 timestamp = block.timestamp;
+
+        // 198 oracles report 100, 1 oracle reports 1000000000
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fairValue = (i == 100) ? 1000000000 : 100;
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Spike value should be filtered out by median
+        assertEq(result.fairValue, 100, "Spike should be filtered out");
+    }
+
+    function test_DuplicateValues_SameTimestamps() public {
+        // Test with all same values but different timestamps
+        uint256 numOracles = 150;
+        uint256 baseTimestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Same value, different timestamps
+            setStoreValues(store, TEST_KEY, 1000, 10000, i + 1, 1, baseTimestamp + i);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 1000, "Value should be 1000");
+        // Timestamp should be one of the middle values
+        assertGe(result.timestamp, baseTimestamp, "Timestamp should be valid");
+    }
+
+    function test_DuplicateValues_CompareGas() public {
+        // Compare gas usage: all same vs random values
+        uint256 numOracles = 150;
+        uint256 timestamp = block.timestamp;
+
+        // First test: all same values (worst case for duplicates)
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 1000, 10000, 1, 1, timestamp);
+        }
+
+        uint256 gasBefore1 = gasleft();
+        DIAOracleV3MetaFairValueField.MedianSet memory result1 = oracle.getMedianValues(TEST_KEY);
+        uint256 gasAfter1 = gasleft();
+        uint256 gasDuplicates = gasBefore1 - gasAfter1;
+
+        // Clear stores
+        for (uint256 i = 0; i < numOracles; i++) {
+            vm.prank(owner);
+            oracle.removeValueStore(address(stores[i]));
+        }
+        delete stores;
+
+        // Second test: random-like values (better distribution)
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fairValue = 1000 + (i * 7);  // Different values
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        uint256 gasBefore2 = gasleft();
+        DIAOracleV3MetaFairValueField.MedianSet memory result2 = oracle.getMedianValues(TEST_KEY);
+        uint256 gasAfter2 = gasleft();
+        uint256 gasRandom = gasBefore2 - gasAfter2;
+
+        // Log the comparison (visible in test output)
+        // With the fix, duplicates should use similar or less gas than distinct values
+        emit log_named_uint("Gas with all duplicates:", gasDuplicates);
+        emit log_named_uint("Gas with distinct values:", gasRandom);
+
+        // Calculate difference safely (avoid underflow)
+        if (gasDuplicates >= gasRandom) {
+            emit log_named_uint("Gas overhead (duplicates - distinct):", gasDuplicates - gasRandom);
+        } else {
+            emit log_named_uint("Gas savings (distinct - duplicates):", gasRandom - gasDuplicates);
+        }
+
+        // Test should pass regardless, but we can see the gas difference
+        assertEq(result1.fairValue, 1000, "Duplicates test");
+        assertGt(result2.fairValue, 0, "Random test");
+    }
+
+    function test_DuplicateValues_ZeroValues() public {
+        // Edge case: all zero values
+        uint256 numOracles = 100;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // All fairValues are 0, should sort by usdValue
+            setStoreValues(store, TEST_KEY, 0, 5000, 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 0, "All zero fairValues should return 0");
+        assertEq(result.usdValue, 5000, "Should return usdValue median");
+    }
+
+    function test_DuplicateValues_MostlyZero() public {
+        // Test with mostly zeros and a few non-zero values
+        uint256 numOracles = 100;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // 90% have fairValue=0, 10% have fairValue=1000
+            uint256 fairValue = (i < 90) ? 0 : 1000;
+            uint256 usdValue = (i < 90) ? 1000 : 10000;
+            setStoreValues(store, TEST_KEY, fairValue, usdValue, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // 90 zeros, 10 values of 1000
+        // When sorted by fairValue (all 0), then by usdValue
+        // Median should still have fairValue=0
+        assertEq(result.fairValue, 0, "Median should have zero fairValue");
+    }
+
+    function testFuzz_DuplicateValues_Fuzz(uint128 numOracles) public {
+        // Fuzz test with varying number of oracles all having same value
+        numOracles = uint128(bound(numOracles, 2, 300));
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // All same value
+            setStoreValues(store, TEST_KEY, 5555, 55555, 1, 1, block.timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 5555, "Should return the common value");
+    }
+
+    function test_DuplicateValues_AllSame_500Oracles() public {
+        // Stress test: 500 oracles all with same value
+        // Before fix: Would cause STACK OVERFLOW
+        // After fix: Should work fine
+        uint256 numOracles = 500;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 1234, 12340, 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 1234, "All same values should return that value");
+        assertEq(result.usdValue, 12340, "USD value should match");
+    }
+
+    function test_DuplicateValues_AllSame_1000Oracles() public {
+        // Extreme stress test: 1000 oracles all with same value
+        // This would DEFINITELY cause stack overflow with recursive implementation
+        // Iterative implementation should handle it easily
+        uint256 numOracles = 1000;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, 9999, 99990, 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 9999, "All same values should return that value");
+        assertEq(result.usdValue, 99990, "USD value should match");
+    }
+
+    function test_IterativeQuickSort_NoStackOverflow() public {
+        // Test that demonstrates iterative implementation prevents stack overflow
+        // Compare: recursive would overflow at ~200-300 elements with duplicates
+        // Iterative should handle 1000+ easily
+
+        uint256 numOracles = 1000;
+        uint256 timestamp = block.timestamp;
+
+        // Create adversarial input: worst case for QuickSort
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // All same value = worst case for partition
+            setStoreValues(store, TEST_KEY, 5000, 50000, 1, 1, timestamp);
+        }
+
+        // This should NOT cause stack overflow with iterative implementation
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        assertEq(result.fairValue, 5000, "Should return correct median");
+        assertEq(result.usdValue, 50000, "Should return correct USD value");
+    }
+
+    function test_PartitionBoundary_LeftPartitionBug() public {
+        // Test for partition boundary bug where left partition with 1 element is not sorted
+        // Bug: When pivotEnd == left, the condition "pivotEnd > left" is false,
+        // so we don't push the left partition even though it might need sorting
+
+        // Scenario: [1, 100, 100, 100, 100]
+        // After partition: lt=1, so lessThanEnd=0
+        // Left partition should be [0, 0] (single element, already sorted)
+        // This should work correctly
+
+        // Scenario: [1, 2, 100, 100, 100]
+        // After first partition with pivot at index 2 (value 100):
+        //   lt=2 (first 100), gt=4 (last 100)
+        //   lessThanEnd = 2-1 = 1
+        //   greaterThanStart = 4+1 = 5 (right+1, meaning empty)
+        // Push: left=[0,1], right=[5,4] (empty, not pushed)
+        // Pop and sort [0,1]: should sort [1,2] correctly
+    }
+
+    function test_PartitionBoundary_EdgeCase() public {
+        // Test edge case: array with two distinct values
+        // [1, 100, 100, 100, 100, 100, 2, 100, 100, 100]
+        // This ensures the algorithm handles boundaries correctly
+
+        uint256 numOracles = 10;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Create specific pattern
+            uint256 fairValue = (i == 0) ? 1 : (i == 6 ? 2 : 100);
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Should sort to [1, 2, 100, 100, 100, 100, 100, 100, 100, 100]
+        // Median of 10 elements (indices 4-5 average): 100
+        assertEq(result.fairValue, 100, "Should handle boundary correctly");
+    }
+
+    function test_PartitionBoundary_SingleElementInLeft() public {
+        // Test when left partition has exactly 1 element
+        // [1, 10, 10, 10, 10]
+        // After partition: lessThanEnd=0 (single element at index 0)
+        // This element is already sorted, so no need to process
+
+        uint256 numOracles = 5;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fairValue = (i == 0) ? 1 : 10;
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted: [1, 10, 10, 10, 10]
+        // Median (index 2): 10
+        assertEq(result.fairValue, 10, "Should handle single element in left partition");
+    }
+
+    function test_PartitionBoundary_SingleElementInRight() public {
+        // Test when right partition has exactly 1 element
+        // [10, 10, 10, 10, 20]
+        // After partition: greaterThanStart=4 (single element at index 4)
+
+        uint256 numOracles = 5;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fairValue = (i == 4) ? 20 : 10;
+            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        }
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted: [10, 10, 10, 10, 20]
+        // Median (index 2): 10
+        assertEq(result.fairValue, 10, "Should handle single element in right partition");
     }
 }

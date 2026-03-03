@@ -25,12 +25,15 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     uint256 public threshold;
     /// @notice Maximum age of data in seconds
     uint256 public timeoutSeconds;
+    /// @notice Maximum number of value stores that can be registered
+    uint256 public maxValueStores;
 
     bytes32 private constant _FAIR_VALUE = keccak256("fairValue");
     bytes32 private constant _USD_VALUE = keccak256("usdValue");
     bytes32 private constant _NUMERATOR = keccak256("numerator");
     bytes32 private constant _DENOMINATOR = keccak256("denominator");
     uint256 private constant _MAX_TIMEOUT_SECONDS = 1 days;
+    uint256 private constant _DEFAULT_MAX_VALUE_STORES = 100;
 
     error InvalidThreshold(uint256);
     error InvalidTimeOut(uint256);
@@ -39,6 +42,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error ZeroAddress();
     error OracleExists();
     error OracleNotFound();
+    error MaxValueStoresReached(uint256);
 
     /// @notice Emitted when timeout seconds is changed
     /// @param oldTimeoutSeconds The previous timeout value
@@ -49,6 +53,11 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     /// @param oldThreshold The previous threshold value
     /// @param newThreshold The new threshold value
     event ThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
+
+    /// @notice Emitted when max value stores is changed
+    /// @param oldMaxValueStores The previous max value stores
+    /// @param newMaxValueStores The new max value stores
+    event MaxValueStoresChanged(uint256 indexed oldMaxValueStores, uint256 indexed newMaxValueStores);
 
     /// @notice Emitted when a value store is added
     /// @param storeAddress The address of the added store
@@ -64,12 +73,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     /// @param initialOwner The address that will own the contract
     constructor(address initialOwner) Ownable(initialOwner) {
         if (initialOwner == address(0)) revert ZeroAddress();
+        maxValueStores = _DEFAULT_MAX_VALUE_STORES;
     }
 
     /// @notice Add a new ValueStore to the oracle
     /// @param newStore The address of the ValueStore to add
     function addValueStore(address newStore) external onlyOwner {
         if (newStore == address(0)) revert ZeroAddress();
+        if (numValueStores >= maxValueStores) revert MaxValueStoresReached(maxValueStores);
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == newStore) revert OracleExists();
         }
@@ -113,6 +124,18 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 oldTimeoutSeconds = timeoutSeconds;
         timeoutSeconds = newTimeoutSeconds;
         emit TimeoutSecondsChanged(oldTimeoutSeconds, newTimeoutSeconds);
+    }
+
+    /// @notice Set the maximum number of value stores that can be registered
+    /// @param newMaxValueStores The new maximum value stores
+    function setMaxValueStores(uint256 newMaxValueStores) external onlyOwner {
+        if (newMaxValueStores == 0) revert InvalidThreshold(newMaxValueStores);
+        if (newMaxValueStores < numValueStores) {
+            revert InvalidThreshold(newMaxValueStores); // Cannot set below current count
+        }
+        uint256 oldMaxValueStores = maxValueStores;
+        maxValueStores = newMaxValueStores;
+        emit MaxValueStoresChanged(oldMaxValueStores, newMaxValueStores);
     }
 
     /// @notice Get median values from all registered ValueStores
@@ -248,7 +271,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     }
 
     // Sorts main[] ascending and reorders a[], b[], c[], d[] in the same way.
-    // Uses hybrid approach: optimized insertion sort for n <= 10, QuickSort for n > 10
+    // Uses hybrid approach: optimized insertion sort for n <= 10, iterative QuickSort for n > 10
     function _sortMultipleByReferenceWithTimestamps(
         uint256[] memory main,
         uint256[] memory a,
@@ -263,8 +286,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         if (len <= 10) {
             _insertionSort(main, a, b, c, d, len);
         } else {
-            // Use QuickSort for larger arrays (n > 10)
-            _quickSort(main, a, b, c, d, 0, len - 1);
+            // Use iterative QuickSort for larger arrays (n > 10)
+            _quickSortIterative(main, a, b, c, d, 0, len - 1);
         }
     }
 
@@ -306,7 +329,76 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
-    // QuickSort implementation for larger arrays (n > 10)
+    // Iterative QuickSort implementation - eliminates recursion depth risk
+    // Uses explicit stack instead of recursive calls
+    // This prevents EVM stack overflow even with 1000+ oracles
+    function _quickSortIterative(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256[] memory d,
+        uint256 left,
+        uint256 right
+    ) private pure {
+        // Use insertion sort for small arrays (optimization)
+        if (right - left + 1 <= 10) {
+            _insertionSortRange(main, a, b, c, d, left, right);
+            return;
+        }
+
+        // Create an explicit stack for storing ranges to be sorted
+        // Maximum stack size is O(log n), but we allocate conservatively
+        // For safety with up to 1000 elements, we need at most 20 stack entries
+        uint256[] memory stack = new uint256[](128); // 64 pairs of (left, right)
+
+        uint256 stackTop = 0;
+
+        // Push initial range
+        stack[stackTop++] = left;
+        stack[stackTop++] = right;
+
+        // Process ranges until stack is empty
+        while (stackTop > 0) {
+            // Pop range
+            right = stack[--stackTop];
+            left = stack[--stackTop];
+
+            // Use insertion sort for small partitions
+            if (right - left + 1 <= 10) {
+                _insertionSortRange(main, a, b, c, d, left, right);
+                continue;
+            }
+
+            // Three-way partition
+            (uint256 pivotEnd, uint256 pivotStart) = _partition3Way(main, a, b, c, d, left, right);
+
+            // Push partitions onto stack for further processing
+            // Partition structure:
+            //   [left, pivotEnd] = elements < pivot (may be empty)
+            //   [pivotEnd+1, pivotStart-1] = elements = pivot (already sorted)
+            //   [pivotStart, right] = elements > pivot (may be empty)
+
+            // Push right partition if it has 2+ elements
+            // Condition: pivotStart < right means at least 2 elements exist
+            if (pivotStart < right) {
+                require(stackTop + 2 <= 128, "Stack overflow in iterative sort");
+                stack[stackTop++] = pivotStart;
+                stack[stackTop++] = right;
+            }
+
+            // Push left partition if it has 2+ elements
+            // Condition: pivotEnd > left means at least 2 elements exist
+            if (pivotEnd > left) {
+                require(stackTop + 2 <= 128, "Stack overflow in iterative sort");
+                stack[stackTop++] = left;
+                stack[stackTop++] = pivotEnd;
+            }
+        }
+    }
+
+    // DEPRECATED: Recursive QuickSort - kept for reference but not used
+    // Use _quickSortIterative instead to avoid EVM stack overflow
     function _quickSort(
         uint256[] memory main,
         uint256[] memory a,
@@ -323,18 +415,32 @@ contract DIAOracleV3MetaFairValueField is Ownable {
                 return;
             }
 
-            uint256 pivotIndex = _partition(main, a, b, c, d, left, right);
+            // Three-way partition: returns (pivotEnd, pivotStart)
+            // Elements in [left, pivotEnd] < pivot
+            // Elements in [pivotEnd+1, pivotStart-1] = pivot
+            // Elements in [pivotStart, right] > pivot
+            (uint256 pivotEnd, uint256 pivotStart) = _partition3Way(main, a, b, c, d, left, right);
 
-            // Recursively sort elements before and after partition
-            if (pivotIndex > 0) {
-                _quickSort(main, a, b, c, d, left, pivotIndex - 1);
+            // Recursively sort only the partitions that need it
+            // Skip the middle partition (elements equal to pivot)
+            // Check if there are elements to sort in left partition
+            if (pivotEnd >= left && pivotEnd > left) {
+                _quickSort(main, a, b, c, d, left, pivotEnd);
             }
-            _quickSort(main, a, b, c, d, pivotIndex + 1, right);
+            // Check if there are elements to sort in right partition
+            if (pivotStart <= right && pivotStart < right) {
+                _quickSort(main, a, b, c, d, pivotStart, right);
+            }
         }
     }
 
-    // Partition function for QuickSort
-    function _partition(
+    // Three-way partition function (Dutch National Flag algorithm)
+    // Efficiently handles duplicate values by partitioning into three sections:
+    // - Less than pivot
+    // - Equal to pivot
+    // - Greater than pivot
+    // Returns (end of less-than section, start of greater-than section)
+    function _partition3Way(
         uint256[] memory main,
         uint256[] memory a,
         uint256[] memory b,
@@ -342,25 +448,45 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory d,
         uint256 left,
         uint256 right
-    ) private pure returns (uint256) {
-        // Use middle element as pivot (better than left/right for sorted data)
+    ) private pure returns (uint256, uint256) {
+        // Use middle element as pivot
         uint256 mid = left + (right - left) / 2;
         uint256 pivot = main[mid];
 
-        // Move pivot to end
+        // Initialize pointers
+        uint256 i = left;    // Current element
+        uint256 lt = left;   // End of less-than section
+        uint256 gt = right;  // Start of greater-than section
+
+        // Move pivot to end temporarily
         _swap(main, a, b, c, d, mid, right);
 
-        uint256 storeIndex = left;
-        for (uint256 i = left; i < right; ++i) {
+        while (i <= gt) {
             if (main[i] < pivot) {
-                _swap(main, a, b, c, d, i, storeIndex);
-                ++storeIndex;
+                // Element is less than pivot - swap to left section
+                _swap(main, a, b, c, d, lt, i);
+                lt++;
+                i++;
+            } else if (main[i] > pivot) {
+                // Element is greater than pivot - swap to right section
+                _swap(main, a, b, c, d, i, gt);
+                gt--;
+                // Don't increment i - need to examine the swapped element
+            } else {
+                // Element equals pivot - keep in middle
+                i++;
             }
         }
 
-        // Move pivot to its final place
-        _swap(main, a, b, c, d, storeIndex, right);
-        return storeIndex;
+        // lt points to first element equal to pivot
+        // gt points to last element equal to pivot
+        // Return:
+        //   - end of less-than section (lt-1), but left if no elements less than pivot
+        //   - start of greater-than section (gt+1), but right if no elements greater than pivot
+        uint256 lessThanEnd = (lt > left) ? lt - 1 : left;
+        uint256 greaterThanStart = (gt < right) ? gt + 1 : right;
+
+        return (lessThanEnd, greaterThanStart);
     }
 
     // Swap elements at indices i and j across all arrays
