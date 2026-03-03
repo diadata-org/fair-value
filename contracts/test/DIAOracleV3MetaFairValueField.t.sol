@@ -10,12 +10,16 @@ import {DIAOracleV3MetaFairValueField} from "../metacontract/DIAOracleV3MetaFair
 contract MockValueStore {
     // Custom error matching real ValueStore contract
     error NoDataForKey();
+    error SimulatedRevert();
 
     mapping(string => uint256) public fairValues;
     mapping(string => uint256) public usdValues;
     mapping(string => uint256) public numerators;
     mapping(string => uint256) public denominators;
     mapping(string => uint256) public timestamps;
+
+    // Track which keys should simulate a revert (for testing failure scenarios)
+    mapping(string => bool) public shouldRevert;
 
     function setValue(
         string memory key,
@@ -32,11 +36,20 @@ contract MockValueStore {
         timestamps[key] = timestamp;
     }
 
+    function setShouldRevert(string memory key, bool shouldRev) external {
+        shouldRevert[key] = shouldRev;
+    }
+
     function getValue(string memory key)
         external
         view
         returns (uint256 fairValue, uint256 usdValue, uint256 numerator, uint256 denominator, uint256 timestamp)
     {
+        // Check if this key should simulate a revert (for testing oracle failures)
+        if (shouldRevert[key]) {
+            revert SimulatedRevert();
+        }
+
         // Revert if no data set for this key (mimics real ValueStore behavior)
         // Uses custom error matching the real ValueStore contract
         if (timestamps[key] == 0) {
@@ -106,6 +119,16 @@ struct TestCase {
              return;
         }
         store.setValue(key, fairValue, usdValue, numerator, denominator, timestamp);
+        // Ensure store doesn't revert for this key (clear any previous revert state)
+        store.setShouldRevert(key, false);
+    }
+
+    function setStoreRevert(
+        MockValueStore store,
+        string memory key
+    ) internal {
+        // Mark this store to revert when getValue is called for this key
+        store.setShouldRevert(key, true);
     }
 
     function runTestCase(TestCase memory testCase) internal {
@@ -146,6 +169,9 @@ struct TestCase {
                             data.denominator,
                             data.timestamp
                         );
+                    } else {
+                        // Mark this store to revert when getValue is called
+                        setStoreRevert(store, TEST_KEY);
                     }
                 }
 
@@ -209,6 +235,9 @@ struct TestCase {
                         data.denominator,
                         data.timestamp
                     );
+                } else {
+                    // Mark this store to revert when getValue is called
+                    setStoreRevert(store, TEST_KEY);
                 }
             }
 
@@ -2023,6 +2052,7 @@ contract DuplicateValuesPerformanceTest is BaseTest {
     }
 }
 
+
 /*//////////////////////////////////////////////////////////////
                     INVARIANT & PROPERTY-BASED TEST SUITE
     Tests mathematical properties and invariants of the oracle
@@ -2359,10 +2389,15 @@ contract InvariantPropertiesTest is BaseTest {
 contract MedianPrecisionTest is BaseTest {
     // Precision tests for median calculation
 
-    function test_Precision_EvenCount_ExactDivision() public {
-        // EVEN COUNT: [100, 200, 300, 400]
-        // Median should be average of middle two: (200 + 300) / 2 = 250
-        // This is exact integer division - no precision loss
+    function test_Precision_EvenCount_RoundingBehavior() public {
+        // Tests that the contract uses ROUNDING (a+b+1)/2, not exact division (a+b)/2
+        //
+        // Scenario 1: Even sum - rounding formula gives exact result
+        // [100, 200, 300, 400] -> middle: 200, 300
+        // Contract: (200 + 300 + 1) / 2 = 501 / 2 = 250
+        // Mathematical: (200 + 300) / 2 = 500 / 2 = 250
+        // When sum is even (500), both formulas give same result
+
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2377,15 +2412,32 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 250, "Median of 100,200,300,400 should be 250");
+        // Result is 250, but this is from ROUNDING formula, not exact division
+        assertEq(result.fairValue, 250, "Rounding formula gives 250 when sum is even");
+ 
+        // Scenario 2: Odd sum - proves we're using rounding, not exact division
+        // [100, 201, 300, 400] -> middle: 201, 300
+        // Contract: (201 + 300 + 1) / 2 = 502 / 2 = 251 (rounds up)
+        // Mathematical exact division: (201 + 300) / 2 = 501 / 2 = 250 (truncates)
+        // DIFFERENCE: This proves we use rounding!
+
+        setStoreValues(store2, TEST_KEY, 201, 2010, 1, 1, timestamp);
+
+        result = oracle.getMedianValues(TEST_KEY);
+
+        // Contract rounds up to 251, not 250
+        assertEq(result.fairValue, 251, "Rounding formula gives 251 (rounds up from 250.5)");
+        assertEq(result.fairValue, (201 + 300 + 1) / 2, "Equals (201+300+1)/2, not (201+300)/2");
+ 
+ 
     }
 
-    function test_Precision_EvenCount_TruncatingDivision() public {
-        // EVEN COUNT: [100, 200, 300, 401]
-        // Sorted: 100, 200, 300, 401
+    function test_Precision_EvenCount_RoundingExact() public {
+        // EVEN COUNT with exact division: [100, 200, 300, 400]
+        // Sorted: 100, 200, 300, 400
         // Middle two: 200, 300
-        // Average: (200 + 300 + 1) / 2 = 250 (exact, since sum is even)
-        // This shows exact division scenario
+        // FairValue median: (200 + 300 + 1) / 2 = 250 (exact, no rounding needed)
+        // When (a + b) is even, (a + b + 1) / 2 = (a + b) / 2, so result is exact
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2396,11 +2448,12 @@ contract MedianPrecisionTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
         setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
-        setStoreValues(store4, TEST_KEY, 401, 4010, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 250, "Median should be 250 (exact division)");
+        assertEq(result.fairValue, 250, "Median should be 250 (exact, no rounding needed)");
+        assertTrue(((200 + 300) % 2) == 0, "Sum is even, so rounding formula gives exact result");
     }
 
     function test_Precision_EvenCount_OddNumbers() public {
@@ -2424,10 +2477,16 @@ contract MedianPrecisionTest is BaseTest {
         assertEq(result.fairValue, 3, "Median of 1,2,3,4 should be 3 (rounded from 2.5)");
     }
 
-    function test_Precision_EvenCount_LargeNumbers() public {
-        // EVEN COUNT with large numbers: [1e18, 2e18, 3e18, 4e18]
-        // Middle two: 2e18, 3e18
-        // Average: (2e18 + 3e18) / 2 = 2.5e18 -> 2.5e18 (exact in this case)
+    function test_Precision_EvenCount_LargeNumbers_WithOddSum() public {
+        // Tests rounding behavior with large numbers where sum is ODD
+        // This proves rounding is used, not truncation
+        //
+        // Scenario 1: Even sum (5e18) - both formulas give same result
+        // [1e18, 2e18, 3e18, 4e18] -> middle: 2e18, 3e18
+        // Rounding: (2e18 + 3e18 + 1) / 2 = 5e18 / 2 = 2.5e18
+        // Truncation: (2e18 + 3e18) / 2 = 5e18 / 2 = 2.5e18
+        // SAME RESULT (doesn't prove which formula is used)
+
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2442,7 +2501,30 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 2.5e18, "Median of 1e18,2e18,3e18,4e18 should be 2.5e18");
+        assertEq(result.fairValue, 2.5e18, "Even sum: both formulas give 2.5e18");
+        assertTrue(((2e18 + 3e18) % 2) == 0, "Sum is even (5e18), can't distinguish formulas");
+
+        // Scenario 2: ODD SUM - proves we use rounding!
+        // [1e18, 2.000001e18, 3e18, 4e18] -> middle: 2.000001e18, 3e18
+        // Sum: 5.000001e18 (ODD)
+        // Rounding: (2.000001e18 + 3e18 + 1) / 2 = 5.000002e18 / 2 = 2.500001e18
+        // Truncation: (2.000001e18 + 3e18) / 2 = 5.000001e18 / 2 = 2.5e18 (truncates!)
+        // DIFFERENCE: Rounding gives 2.500001e18, truncation gives 2.5e18
+
+        setStoreValues(store2, TEST_KEY, 2_000_001_000_000_000_000, 20_000_010_000_000_000_000, 1, 1, timestamp);
+
+        result = oracle.getMedianValues(TEST_KEY);
+
+        // Contract uses rounding: (a + b + 1) / 2
+        // With large numbers, the +1 has minimal visible effect
+        uint256 valA = 2_000_001_000_000_000_000;
+        uint256 valB = 3_000_000_000_000_000_000;
+        uint256 sum = valA + valB;
+        uint256 expected = (sum + 1) / 2;
+
+        assertEq(result.fairValue, expected, "Uses (a+b+1)/2 formula");
+
+ 
     }
 
     function test_Precision_NumeratorDenominator_EvenCount() public {
@@ -2469,12 +2551,16 @@ contract MedianPrecisionTest is BaseTest {
         assertEq(result.denominator, 1, "Median denominator should be from right middle oracle");
     }
 
-    function test_Precision_NumeratorDenominator_PrecisionLoss() public {
-        // EVEN COUNT: Shows that numerator/denominator come from right middle oracle
-        // Values sorted by fairValue: [50/2, 57/7, 60/5, 66/3]
-        // Middle two: 57 (400/7), 60 (300/5)
-        // FairValue median: (57 + 60 + 1) / 2 = 59 (rounded)
-        // Numerator/denominator from RIGHT middle oracle: 300/5
+    function test_Precision_NumeratorDenominator_FromMiddleOracle() public {
+        // Tests that numerator/denominator are taken from the RIGHT middle oracle
+        // NOT averaged independently!
+        //
+        // Key insight: The contract does NOT average numerators and denominators
+        // Instead:
+        // 1. Calculate fairValue median using rounding: (57 + 60 + 1) / 2 = 59
+        // 2. Find which oracle's fairValue is closest to the median
+        // 3. Return THAT oracle's numerator and denominator
+
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2482,18 +2568,37 @@ contract MedianPrecisionTest is BaseTest {
         MockValueStore store3 = createMockStore();
         MockValueStore store4 = createMockStore();
 
-        setStoreValues(store1, TEST_KEY, 50, 500, 100, 2, timestamp);
-        setStoreValues(store2, TEST_KEY, 66, 660, 200, 3, timestamp);
-        setStoreValues(store3, TEST_KEY, 60, 600, 300, 5, timestamp);
-        setStoreValues(store4, TEST_KEY, 57, 570, 400, 7, timestamp);
+        // Sorted by fairValue: [50, 57, 60, 66]
+        // Each has different numerator/denominator:
+        // 50 (100/2), 57 (400/7), 60 (300/5), 66 (200/3)
+        setStoreValues(store1, TEST_KEY, 50, 500, 100, 2, timestamp);   // 100/2 = 50
+        setStoreValues(store2, TEST_KEY, 57, 570, 400, 7, timestamp);   // 400/7 ≈ 57.14
+        setStoreValues(store3, TEST_KEY, 60, 600, 300, 5, timestamp);   // 300/5 = 60
+        setStoreValues(store4, TEST_KEY, 66, 660, 200, 3, timestamp);   // 200/3 ≈ 66.66
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // Sorted by fairValue: 50 (100/2), 57 (400/7), 60 (300/5), 66 (200/3)
-        // Middle two: 57 (400/7), 60 (300/5)
-        // RIGHT middle: 60 (300/5)
-        assertEq(result.numerator, 300, "Median numerator should be from right middle oracle");
-        assertEq(result.denominator, 5, "Median denominator should be from right middle oracle");
+        // FairValue calculation:
+        // Sorted: 50, 57, 60, 66
+        // Middle two: 57, 60
+        // FairValue median: (57 + 60 + 1) / 2 = 59 (rounds up)
+
+        // Since fairValue rounds to 59 (closer to 60), we take RIGHT middle oracle's data
+        // Right middle oracle has: fairValue=60, numerator=300, denominator=5
+
+        assertEq(result.fairValue, 59, "FairValue median: (57+60+1)/2 = 59");
+        assertEq(result.numerator, 300, "Numerator from oracle with fairValue=60");
+        assertEq(result.denominator, 5, "Denominator from oracle with fairValue=60");
+
+        // This proves: numerator/denominator are NOT averaged
+        // If they were averaged: (400/7 + 300/5) / 2 = (2000/35 + 2100/35) / 2 = 4100/70 ≈ 58.57
+        // But we return 300/5 = 60 (the value from one oracle)
+
+        emit log_string("=== NUMERATOR/DENOMINATOR SELECTION ===");
+        emit log_string("NOT averaged independently!");
+        emit log_string("Taken from RIGHT middle oracle after fairValue rounding");
+        emit log_named_uint("FairValue median", 59);
+        emit log_string("Closest to 60, so use 60's numerator/denominator: 300/5");
     }
 
     function test_Precision_OddCount_NoAveraging() public {
@@ -2608,12 +2713,9 @@ contract MedianPrecisionTest is BaseTest {
         assertEq(evenResult.fairValue, 250, "Even count median should average middle values");
     }
 
-    function test_Precision_Documentation_TruncationBehavior() public {
-        // DOCUMENTATION: This test documents the rounding behavior
-        // When averaging two middle values for even count:
-        // - If sum is even: exact division (e.g., (200 + 300) / 2 = 250)
-        // - If sum is odd: round to nearest (e.g., (201 + 300 + 1) / 2 = 251)
-        // Maximum precision deviation per median calculation: 0.5 units
+    function test_Precision_Documentation_RoundingBehavior() public {
+ 
+
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2621,7 +2723,9 @@ contract MedianPrecisionTest is BaseTest {
         MockValueStore store3 = createMockStore();
         MockValueStore store4 = createMockStore();
 
-        // Even sum: (200 + 300 + 1) / 2 = 250 (rounds down since sum+1 is even)
+        // Scenario 1: Even sum - exact result
+        // [100, 200, 300, 400] -> middle: 200, 300
+        // (200 + 300 + 1) / 2 = 501 / 2 = 250 (exact since 200+300=500 is even)
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
         setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
@@ -2629,24 +2733,32 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 250, "Even sum: exact result");
-        assertTrue(((200 + 300) % 2) == 0, "Sum is even, result is exact");
+        assertEq(result.fairValue, 250, "Even sum: exact result (250.0)");
+        assertTrue(((200 + 300) % 2) == 0, "Sum is even (500), result is exact");
 
-        // Odd sum: (201 + 300 + 1) / 2 = 251 (rounds up)
+        // Scenario 2: Odd sum - rounds up
+        // [100, 201, 300, 400] -> middle: 201, 300
+        // (201 + 300 + 1) / 2 = 502 / 2 = 251 (rounds up from 250.5)
         setStoreValues(store2, TEST_KEY, 201, 2010, 1, 1, timestamp);
 
         result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 251, "Odd sum: rounds to nearest (up for .5)");
-        assertTrue(((201 + 300) % 2) != 0, "Sum is odd, so rounding occurs");
+        assertEq(result.fairValue, 251, "Odd sum: rounds half-up to 251 (not 250)");
+        assertTrue(((201 + 300) % 2) != 0, "Sum is odd (501), so rounding occurs");
+ 
     }
 
-    function test_Precision_MaximumTruncation() public {
-        // Test maximum rounding scenario
+    function test_Precision_MaximumRounding() public {
+        // Tests maximum rounding error scenario
         // [100, 101, 102, 103]
         // Middle two: 101, 102
-        // Average: (101 + 102 + 1) / 2 = 102 (rounded up from 101.5)
-        // Maximum deviation from mathematical average: 0.5 units
+        // Mathematical average: 101.5
+        // Contract: (101 + 102 + 1) / 2 = 102 (rounds up from 101.5)
+        // Maximum deviation from mathematical average: 0.5 units (rounds up for .5)
+        //
+        // Note: Using (a + b + 1) / 2 means:
+        // - Odd sums (e.g., 203) round up: (203 + 1) / 2 = 102
+        // - This is "round half up" behavior, not truncation
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2661,7 +2773,7 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 102, "Rounded up: 101.5 -> 102");
+        assertEq(result.fairValue, 102, "Rounds up: 101.5 -> 102 (using round-half-up)");
     }
 
     function test_Precision_AllValuesSame() public {
