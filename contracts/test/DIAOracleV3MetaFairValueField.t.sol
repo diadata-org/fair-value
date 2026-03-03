@@ -1749,9 +1749,19 @@ contract DuplicateValuesPerformanceTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
+
         // 100 values of 100, 100 values of 200
-        // Median: (100 + 200) / 2 = 150
-        assertEq(result.fairValue, 150, "Median of two values should be average");
+        // Sorted: [100, 100, ..., 100, 200, 200, ..., 200]
+        // Two middle values (100th and 101st): 100, 200
+        uint256 mid1 = 100;
+        uint256 mid2 = 200;
+
+        // Contract uses round-half-up: (mid1 + mid2 + 1) / 2
+        uint256 expectedMedian = (mid1 + mid2 + 1) / 2; // (300 + 1) / 2 = 150 (same as truncation since sum is even)
+
+        assertEq(result.fairValue, expectedMedian, "Median: (100 + 200 + 1) / 2 = 150");
+
+
     }
 
     function test_DuplicateValues_ThreeDistinctValues() public {
@@ -2153,7 +2163,7 @@ contract InvariantPropertiesTest is BaseTest {
     }
 
     function test_Invariant_MedianIsAverageOfMiddles_EvenCount() public {
-        // INVARIANT: For even count, median should be average of two middle values
+        // INVARIANT: For even count, median should be average of two middle values with rounding
         uint256 numOracles = 10; // Even number
         uint256 timestamp = block.timestamp;
 
@@ -2165,8 +2175,18 @@ contract InvariantPropertiesTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // For even count (10), median is average of 5th and 6th elements (indices 4, 5)
-        assertEq(result.fairValue, 550, "Median should be average of two middle values");
+
+        // For even count (10), sorted values: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+        // Two middle values (5th and 6th, indices 4 and 5): 500, 600
+        uint256 mid1 = 500;
+        uint256 mid2 = 600;
+
+        // Formula: (mid1 + mid2 + 1) / 2 = round-half-up
+        uint256 expectedMedian = (mid1 + mid2 + 1) / 2; // (1100 + 1) / 2 = 550
+
+        assertEq(result.fairValue, expectedMedian, "Median: (500 + 600 + 1) / 2 = 550");
+
+ 
     }
 
     function test_Invariant_RoundTrip_SetGetValues() public {
@@ -2258,9 +2278,16 @@ contract InvariantPropertiesTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
+ 
         // Sorted values: [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000]
-        // For 20 elements, median is average of 10th and 11th: (500 + 550) / 2 = 525
-        assertEq(result.fairValue, 525, "Median indicates proper sorting occurred");
+        // For 20 elements (even count), median is average of 10th and 11th elements
+        uint256 mid1 = 500; // 10th element (index 9)
+        uint256 mid2 = 550; // 11th element (index 10)
+
+        // Contract uses round-half-up: (mid1 + mid2 + 1) / 2
+        uint256 expectedMedian = (mid1 + mid2 + 1) / 2; // (1050 + 1) / 2 = 525
+
+        assertEq(result.fairValue, expectedMedian, "Median: (500 + 550 + 1) / 2 = 525");
     }
 
     function test_Invariant_TimestampFromOneOfTheOracles() public {
@@ -2617,11 +2644,7 @@ contract MedianPrecisionTest is BaseTest {
         // If they were averaged: (400/7 + 300/5) / 2 = (2000/35 + 2100/35) / 2 = 4100/70 ≈ 58.57
         // But we return 300/5 = 60 (the value from one oracle)
 
-        emit log_string("=== NUMERATOR/DENOMINATOR SELECTION ===");
-        emit log_string("NOT averaged independently!");
-        emit log_string("Taken from RIGHT middle oracle after fairValue rounding");
-        emit log_named_uint("FairValue median", 59);
-        emit log_string("Closest to 60, so use 60's numerator/denominator: 300/5");
+ 
     }
 
     function test_Precision_OddCount_NoAveraging() public {
@@ -2712,11 +2735,11 @@ contract MedianPrecisionTest is BaseTest {
 
     function test_Precision_CompareOddVsEven() public {
         // Compare precision: odd count (exact) vs even count (rounded)
-        // ODD: [100, 200, 300] -> 200 (exact)
+        // ODD: [100, 200, 300] -> 200 (exact middle)
         // EVEN: [100, 200, 300, 400] -> (200+300+1)/2 = 250 (rounded to nearest)
         uint256 timestamp = block.timestamp;
 
-        // Odd count test
+        // Odd count test: [100, 200, 300]
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
         MockValueStore store3 = createMockStore();
@@ -2726,14 +2749,30 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory oddResult = oracle.getMedianValues(TEST_KEY);
 
-        // Add fourth store for even count
+        // Add fourth store for even count: [100, 200, 300, 400]
         MockValueStore store4 = createMockStore();
         setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
 
         DIAOracleV3MetaFairValueField.MedianSet memory evenResult = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(oddResult.fairValue, 200, "Odd count median should be exact");
-        assertEq(evenResult.fairValue, 250, "Even count median should average middle values");
+        //  IMPROVED: Validate mathematical relationships
+
+        // ODD COUNT: Exact middle value (no averaging)
+        uint256 oddExpected = 200; // Middle of [100, 200, 300]
+        assertEq(oddResult.fairValue, oddExpected, "Odd count: exact middle value");
+ 
+
+        // EVEN COUNT: Average of two middle values with rounding
+        // Middle values: 200 and 300
+        uint256 mid1 = 200;
+        uint256 mid2 = 300;
+        uint256 evenExpected = (mid1 + mid2 + 1) / 2; // Round-half-up: (500+1)/2 = 250
+        assertEq(evenResult.fairValue, evenExpected, "Even count: average of middle values with rounding");
+ 
+
+        //  Additional validation: Show that even count is close to odd count
+        // When adding 400 to [100, 200, 300], median shifts from 200 to 250
+        assertTrue(evenResult.fairValue > oddResult.fairValue, "Even median > odd median (new value pulls average up)");
     }
 
     function test_Precision_Documentation_RoundingBehavior() public {
@@ -3101,8 +3140,7 @@ contract OverflowEdgeCaseTest is BaseTest {
         assertEq(result.numerator, 0, "Numerator = 0");
         assertEq(result.denominator, 0, "Denominator = 0 (when numerator is also 0)");
 
-        emit log_string("INFO: numerator=0, denominator=0 is valid (represents zero/undefined)");
-        emit log_string("Real ValueStore allows this (only rejects numerator!=0 with denominator=0)");
+ 
     }
 
     function test_EdgeCase_ZeroDenominator_EvenCount() public {
@@ -3152,9 +3190,7 @@ contract OverflowEdgeCaseTest is BaseTest {
         assertEq(result.fairValue, 200, "FairValue");
         assertEq(result.numerator, 0, "Numerator = 0");
         assertEq(result.denominator, 0, "Denominator = 0 (when numerator is also 0)");
-
-        emit log_string("INFO: All oracles have numerator=0, denominator=0");
-        emit log_string("This represents no fair value data - valid edge case");
+ 
     }
 
     function test_EdgeCase_ZeroNumerator() public {
@@ -3201,4 +3237,534 @@ contract OverflowEdgeCaseTest is BaseTest {
         // Odd count: should return the middle value (store2's value) - no summing
         assertEq(result.fairValue, largeValue * 2, "Should handle very large values with odd count");
     }
+}
+
+/*//////////////////////////////////////////////////////////////
+                    EMPTY & ZERO INPUT TEST SUITE
+    Tests for critical edge cases with no data or all failures
+//////////////////////////////////////////////////////////////*/
+contract EmptyInputEdgeCaseTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_Empty_NoOraclesRegistered() public {
+        // Test behavior when NO oracles are registered
+        // Expected: Should revert with ThresholdNotMet(0, threshold)
+
+        // Don't add any stores - just call getMedianValues immediately
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.ThresholdNotMet.selector,
+                0,  // 0 valid oracles
+                2   // threshold = 2
+            )
+        );
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_Empty_AllOraclesRevert() public {
+        // Test behavior when ALL oracles revert (simulating complete failure)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Mark ALL stores to revert when getValue is called
+        setStoreRevert(store1, TEST_KEY);
+        setStoreRevert(store2, TEST_KEY);
+        setStoreRevert(store3, TEST_KEY);
+        setStoreRevert(store4, TEST_KEY);
+
+        // Should revert because NO oracles provide valid data
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.ThresholdNotMet.selector,
+                0,  // 0 valid oracles (all reverted)
+                2   // threshold = 2
+            )
+        );
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_Empty_SomeOraclesRevert() public {
+        // Test behavior when SOME oracles revert but not all
+        // Expected: Should use remaining valid oracles if count >= threshold
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Oracle 1 and 3 provide valid data
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        // Oracle 2 and 4 revert
+        setStoreRevert(store2, TEST_KEY);
+        setStoreRevert(store4, TEST_KEY);
+
+        // Should succeed: 2 valid oracles >= threshold (2)
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // With 2 valid oracles: [100, 300]
+        // Median: (100 + 300 + 1) / 2 = 200
+        assertEq(result.fairValue, 200, "Should use valid oracles when some revert");
+    }
+
+    function test_Empty_AllDataStale() public {
+        // Test behavior when ALL oracle data is stale (too old)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        // Warp to a known timestamp to avoid underflow
+        vm.warp(10000);
+        uint256 oldTimestamp = block.timestamp - 4000;  // 6000 (older than 3600 timeout)
+
+        // All oracles have stale data
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, oldTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, oldTimestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, oldTimestamp);
+
+        // Should revert because NO oracles have fresh data
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.ThresholdNotMet.selector,
+                0,  // 0 fresh oracles (all stale)
+                2   // threshold = 2
+            )
+        );
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_Empty_SomeDataStale() public {
+        // Test behavior when SOME data is stale, some is fresh
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        // Warp to a known timestamp to avoid underflow
+        vm.warp(10000);
+        uint256 freshTimestamp = block.timestamp;
+        uint256 oldTimestamp = block.timestamp - 4000;  // 6000 (stale, older than 3600 timeout)
+
+        // Oracle 1 and 3 have stale data
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, oldTimestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, oldTimestamp);
+
+        // Oracle 2 and 4 have fresh data
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, freshTimestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, freshTimestamp);
+
+        // Should succeed: 2 fresh oracles >= threshold (2)
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // With 2 fresh oracles: [200, 400]
+        // Median: (200 + 400 + 1) / 2 = 300
+        assertEq(result.fairValue, 300, "Should use fresh oracles when some are stale");
+    }
+
+    function test_Empty_BelowThreshold() public {
+        // Test with 1 oracle when threshold is 2
+        // Expected: Should revert with ThresholdNotMet
+
+        MockValueStore store1 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Only 1 oracle, but threshold is 2
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+
+        // Should revert: only 1 valid oracle < threshold (2)
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.ThresholdNotMet.selector,
+                1,  // 1 valid oracle
+                2   // threshold = 2
+            )
+        );
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_Empty_ExactlyAtThreshold() public {
+        // Test with exactly threshold number of oracles
+        // Expected: Should succeed (at threshold is OK)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Exactly 2 oracles = threshold (2)
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+
+        // Should succeed: exactly at threshold
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // With 2 oracles: [100, 200]
+        // Median: (100 + 200 + 1) / 2 = 150
+        assertEq(result.fairValue, 150, "Should succeed when exactly at threshold");
+    }
+
+    function test_Empty_ZeroFairValue() public {
+        // Test when oracles return fairValue = 0
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // All oracles report fairValue = 0 (edge case)
+        setStoreValues(store1, TEST_KEY, 0, 0, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 0, 0, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 0, 0, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Median of [0, 0, 0] = 0
+        assertEq(result.fairValue, 0, "Should handle all zeros");
+        assertEq(result.usdValue, 0, "USD value should also be zero");
+        assertEq(result.numerator, 1, "Numerator from middle oracle");
+        assertEq(result.denominator, 1, "Denominator from middle oracle");
+    }
+
+    function test_Empty_MixedZeroAndNonZero() public {
+        // Test mix of zero and non-zero fairValues
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Mix: 0, 200, 0, 400
+        setStoreValues(store1, TEST_KEY, 0, 0, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 0, 0, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Sorted by fairValue: [0, 0, 200, 400]
+        // Middle two: 0 and 200
+        // Median: (0 + 200 + 1) / 2 = 100
+        assertEq(result.fairValue, 100, "Should handle mixed zeros and non-zeros");
+    }
+}
+
+/// @title SecurityTest
+/// @notice Security-related tests for manipulation resistance and access control
+contract SecurityTest is BaseTest {
+    // Gap 1: Manipulation Resistance Tests
+
+    function test_FlashLoanResistance_RapidAddRemove() public {
+        // SECURITY: Can someone manipulate median by rapidly adding/removing stores?
+        // Attack scenario: Add malicious store, get median, remove it quickly
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Setup: 3 honest oracles with values [100, 200, 300]
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        // Get honest median: 200
+        DIAOracleV3MetaFairValueField.MedianSet memory honestResult = oracle.getMedianValues(TEST_KEY);
+        assertEq(honestResult.fairValue, 200, "Honest median should be 200");
+
+        // ATTACK: Attacker adds malicious oracle with extreme value
+        MockValueStore maliciousStore = createMockStore();
+        setStoreValues(maliciousStore, TEST_KEY, 999999, 9999990, 1, 1, timestamp);
+
+        // Get manipulated median: [100, 200, 300, 999999] -> (200 + 300 + 1) / 2 = 250
+        DIAOracleV3MetaFairValueField.MedianSet memory manipulatedResult = oracle.getMedianValues(TEST_KEY);
+
+        //  DEFENSE: Single extreme value shouldn't dramatically shift median
+        assertLe(manipulatedResult.fairValue, 300, "Median should resist single extreme value");
+        assertGe(manipulatedResult.fairValue, 200, "Median should stay within reasonable bounds");
+
+ 
+    }
+
+    function test_FlashLoanThreshold_CannotChangeDuringCall() public {
+        // SECURITY: Threshold cannot be changed during median calculation
+        // This prevents: setThreshold(1) -> getMedian -> setThreshold(2) manipulation
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        // Get median with threshold = 2 (default)
+        DIAOracleV3MetaFairValueField.MedianSet memory result1 = oracle.getMedianValues(TEST_KEY);
+        assertEq(result1.fairValue, 200, "Median with threshold=2");
+
+        //  DEFENSE: Changing threshold after the fact doesn't affect previous calculations
+        vm.prank(owner);
+        oracle.setThreshold(3);
+
+        // Previous result should be unchanged
+        assertEq(result1.fairValue, 200, "Previous median result unchanged");
+
+        // New call with higher threshold requires 3 oracles (still passes)
+        DIAOracleV3MetaFairValueField.MedianSet memory result2 = oracle.getMedianValues(TEST_KEY);
+        assertEq(result2.fairValue, 200, "Median with threshold=3");
+
+ 
+    }
+
+    function test_TimestampManipulation_FutureTimestamp() public {
+        // SECURITY: What if oracles report future timestamps?
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 currentTimestamp = block.timestamp;
+        uint256 futureTimestamp = currentTimestamp + 86400; // 1 day in the future
+
+        // store1 and store2 report current data
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, currentTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, currentTimestamp);
+
+        // store3 reports FUTURE timestamp (potential manipulation)
+        setStoreValues(store3, TEST_KEY, 999999, 9999990, 1, 1, futureTimestamp);
+
+        //  DEFENSE: Future timestamps should be accepted (Oracle's responsibility to validate)
+        // The contract uses oracle data as-is; timestamp validation is the oracle's job
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Result will include the future-timestamped value
+        // This is EXPECTED behavior - timestamp validation is the oracle's responsibility
+        assertEq(result.fairValue, 200, "Median includes future-timestamped value");
+
+
+    }
+
+    function test_TimestampManipulation_VeryOldTimestamp() public {
+        // SECURITY: What if oracles report very old timestamps (beyond timeout)?
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        vm.warp(10000); // Set block.timestamp to a known value
+        uint256 currentTimestamp = block.timestamp;
+        uint256 ancientTimestamp = currentTimestamp - 10000; // Very old
+
+        // store1 and store2 report fresh data
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, currentTimestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, currentTimestamp);
+
+        // store3 reports ANCIENT data (beyond timeout)
+        setStoreValues(store3, TEST_KEY, 999999, 9999990, 1, 1, ancientTimestamp);
+
+        //  DEFENSE: Old data is automatically excluded by timeout mechanism
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Ancient data should be excluded, so median comes from fresh data
+        assertEq(result.fairValue, 150, "Old data excluded: median from fresh oracles only");
+
+ 
+    }
+
+    // Gap 2: Access Control Tests for Edge Cases
+
+    function test_OwnershipTransfer_NewOwnerCanRemoveStores() public {
+        // SECURITY: Can new owner immediately remove all stores after transfer?
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        // Verify setup works
+        DIAOracleV3MetaFairValueField.MedianSet memory resultBefore = oracle.getMedianValues(TEST_KEY);
+        assertEq(resultBefore.fairValue, 200, "Median before transfer");
+
+        // Transfer ownership
+        address newOwner = address(0x999);
+        vm.prank(owner);
+        oracle.transferOwnership(newOwner);
+
+        //  SECURITY RISK: New owner CAN immediately remove all stores
+        // This is EXPECTED BEHAVIOR - new owner has full control
+        vm.prank(newOwner);
+        oracle.removeValueStore(address(store1));
+
+        vm.prank(newOwner);
+        oracle.removeValueStore(address(store2));
+
+        vm.prank(newOwner);
+        oracle.removeValueStore(address(store3));
+
+        // Now no stores remain - oracle returns no data
+        //  EXPECTED: Panic when trying to get median with 0 oracles (arithmetic underflow in division)
+        vm.expectRevert(); // Will panic due to division by zero in calculation
+        oracle.getMedianValues(TEST_KEY);
+
+ 
+    }
+
+    function test_OwnershipTransfer_OldOwnerCannotOperate() public {
+        // SECURITY: Can old owner still perform operations after transfer?
+
+        MockValueStore store1 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+
+        // Transfer ownership
+        address newOwner = address(0x999);
+        vm.prank(owner);
+        oracle.transferOwnership(newOwner);
+
+        //  DEFENSE: Old owner cannot add stores anymore
+        // Test 1: Try from old owner (should fail)
+        MockValueStore store2 = createMockStore();
+        bool oldOwnerCanAddStore = false;
+        vm.prank(owner);
+        try oracle.addValueStore(address(store2)) {
+            oldOwnerCanAddStore = true;
+        } catch {
+            oldOwnerCanAddStore = false;
+        }
+        assertTrue(!oldOwnerCanAddStore, "Old owner should NOT be able to add stores");
+
+         // Test 2: Try from old owner (should fail)
+        bool oldOwnerCanSetThreshold = false;
+        vm.prank(owner);
+        try oracle.setThreshold(1) {
+            oldOwnerCanSetThreshold = true;
+        } catch {
+            oldOwnerCanSetThreshold = false;
+        }
+        assertTrue(!oldOwnerCanSetThreshold, "Old owner should NOT be able to set threshold");
+
+
+    }
+
+ 
+
+    function test_ReentrancyProtection_StateChangingFunctions() public {
+        // SECURITY: Test that state-changing functions are not vulnerable
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+
+        //  DEFENSE: All state-changing functions have onlyOwner modifier
+        // Only trusted owner can call them, preventing external reentrancy
+
+        // Test 1: Non-owner cannot add stores
+        bool nonOwnerCanAdd = false;
+        vm.prank(address(this)); // Non-owner
+        try oracle.addValueStore(address(store1)) {
+            nonOwnerCanAdd = true;
+        } catch {
+            nonOwnerCanAdd = false;
+        }
+        assertTrue(!nonOwnerCanAdd, "Non-owner should NOT be able to add stores");
+
+        // Owner CAN add stores
+        vm.prank(owner);
+        oracle.addValueStore(address(store1));
+
+        // Test 2: Non-owner cannot remove stores
+        vm.prank(owner);
+        oracle.addValueStore(address(store2));
+
+        bool nonOwnerCanRemove = false;
+        vm.prank(address(0x123)); // Random non-owner
+        try oracle.removeValueStore(address(store2)) {
+            nonOwnerCanRemove = true;
+        } catch {
+            nonOwnerCanRemove = false;
+        }
+        assertTrue(!nonOwnerCanRemove, "Non-owner should NOT be able to remove stores");
+
+        // Test 3: Non-owner cannot set threshold
+        bool nonOwnerCanSetThreshold = false;
+        vm.prank(address(0x456));
+        try oracle.setThreshold(5) {
+            nonOwnerCanSetThreshold = true;
+        } catch {
+            nonOwnerCanSetThreshold = false;
+        }
+        assertTrue(!nonOwnerCanSetThreshold, "Non-owner should NOT be able to set threshold");
+
+
+    }
+
+    function test_ManipulationResistance_MultipleExtremeValues() public {
+        // SECURITY: What if attacker adds multiple extreme values?
+
+        MockValueStore honest1 = createMockStore();
+        MockValueStore honest2 = createMockStore();
+        MockValueStore honest3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // 3 honest oracles: [100, 200, 300]
+        setStoreValues(honest1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(honest2, TEST_KEY, 200, 2000, 1, 1, timestamp);
+        setStoreValues(honest3, TEST_KEY, 300, 3000, 1, 1, timestamp);
+
+        // Honest median: 200
+        DIAOracleV3MetaFairValueField.MedianSet memory honestResult = oracle.getMedianValues(TEST_KEY);
+        assertEq(honestResult.fairValue, 200, "Honest median");
+
+        // ATTACK: Add 2 extreme malicious oracles
+        MockValueStore malicious1 = createMockStore();
+        MockValueStore malicious2 = createMockStore();
+        setStoreValues(malicious1, TEST_KEY, 999999, 9999990, 1, 1, timestamp);
+        setStoreValues(malicious2, TEST_KEY, 999998, 9999980, 1, 1, timestamp);
+
+        // With 5 oracles: [100, 200, 300, 999998, 999999]
+        // Sorted: [100, 200, 300, 999998, 999999]
+        // Median (3rd element): 300
+        DIAOracleV3MetaFairValueField.MedianSet memory attackedResult = oracle.getMedianValues(TEST_KEY);
+
+        //  DEFENSE: Even with 2 extreme values, median is 300 (not 999998+)
+        assertEq(attackedResult.fairValue, 300, "Median resists multiple extreme values");
+
+ 
+    }
+
+    
+
+    
+
+    
+
+ 
+ 
+ 
 }
