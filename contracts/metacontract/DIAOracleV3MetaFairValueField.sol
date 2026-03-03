@@ -248,6 +248,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     }
 
     // Sorts main[] ascending and reorders a[], b[], c[], d[] in the same way.
+    // Uses hybrid approach: optimized insertion sort for n <= 10, QuickSort for n > 10
     function _sortMultipleByReferenceWithTimestamps(
         uint256[] memory main,
         uint256[] memory a,
@@ -256,21 +257,173 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory d,
         uint256 len
     ) internal pure {
-        for (uint256 i = 1; i < len; i++) {
+        if (len <= 1) return;
+
+        // Use optimized insertion sort for small arrays (n <= 10)
+        if (len <= 10) {
+            _insertionSort(main, a, b, c, d, len);
+        } else {
+            // Use QuickSort for larger arrays (n > 10)
+            _quickSort(main, a, b, c, d, 0, len - 1);
+        }
+    }
+
+    // Optimized insertion sort for small arrays (n <= 10)
+    function _insertionSort(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256[] memory d,
+        uint256 len
+    ) private pure {
+        for (uint256 i = 1; i < len; ++i) {
             uint256 keyMain = main[i];
             uint256 keyA = a[i];
             uint256 keyB = b[i];
             uint256 keyC = c[i];
             uint256 keyD = d[i];
             uint256 j = i;
-            while (j != 0 && main[j - 1] > keyMain) {
-                main[j] = main[j - 1];
-                a[j] = a[j - 1];
-                b[j] = b[j - 1];
-                c[j] = c[j - 1];
-                d[j] = d[j - 1];
-                j--;
+
+            // Shift elements that are greater than keyMain
+            while (j > 0) {
+                uint256 prev = j - 1;
+                if (main[prev] <= keyMain) break;
+
+                main[j] = main[prev];
+                a[j] = a[prev];
+                b[j] = b[prev];
+                c[j] = c[prev];
+                d[j] = d[prev];
+                j = prev;
             }
+
+            main[j] = keyMain;
+            a[j] = keyA;
+            b[j] = keyB;
+            c[j] = keyC;
+            d[j] = keyD;
+        }
+    }
+
+    // QuickSort implementation for larger arrays (n > 10)
+    function _quickSort(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256[] memory d,
+        uint256 left,
+        uint256 right
+    ) private pure {
+        if (left < right) {
+            // Use insertion sort for small partitions (optimization)
+            if (right - left + 1 <= 10) {
+                _insertionSortRange(main, a, b, c, d, left, right);
+                return;
+            }
+
+            uint256 pivotIndex = _partition(main, a, b, c, d, left, right);
+
+            // Recursively sort elements before and after partition
+            if (pivotIndex > 0) {
+                _quickSort(main, a, b, c, d, left, pivotIndex - 1);
+            }
+            _quickSort(main, a, b, c, d, pivotIndex + 1, right);
+        }
+    }
+
+    // Partition function for QuickSort
+    function _partition(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256[] memory d,
+        uint256 left,
+        uint256 right
+    ) private pure returns (uint256) {
+        // Use middle element as pivot (better than left/right for sorted data)
+        uint256 mid = left + (right - left) / 2;
+        uint256 pivot = main[mid];
+
+        // Move pivot to end
+        _swap(main, a, b, c, d, mid, right);
+
+        uint256 storeIndex = left;
+        for (uint256 i = left; i < right; ++i) {
+            if (main[i] < pivot) {
+                _swap(main, a, b, c, d, i, storeIndex);
+                ++storeIndex;
+            }
+        }
+
+        // Move pivot to its final place
+        _swap(main, a, b, c, d, storeIndex, right);
+        return storeIndex;
+    }
+
+    // Swap elements at indices i and j across all arrays
+    function _swap(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256[] memory d,
+        uint256 i,
+        uint256 j
+    ) private pure {
+        if (i == j) return;
+
+        uint256 tempMain = main[i];
+        uint256 tempA = a[i];
+        uint256 tempB = b[i];
+        uint256 tempC = c[i];
+        uint256 tempD = d[i];
+
+        main[i] = main[j];
+        a[i] = a[j];
+        b[i] = b[j];
+        c[i] = c[j];
+        d[i] = d[j];
+
+        main[j] = tempMain;
+        a[j] = tempA;
+        b[j] = tempB;
+        c[j] = tempC;
+        d[j] = tempD;
+    }
+
+    // Insertion sort for a range (used by QuickSort for small partitions)
+    function _insertionSortRange(
+        uint256[] memory main,
+        uint256[] memory a,
+        uint256[] memory b,
+        uint256[] memory c,
+        uint256[] memory d,
+        uint256 left,
+        uint256 right
+    ) private pure {
+        for (uint256 i = left + 1; i <= right; ++i) {
+            uint256 keyMain = main[i];
+            uint256 keyA = a[i];
+            uint256 keyB = b[i];
+            uint256 keyC = c[i];
+            uint256 keyD = d[i];
+            uint256 j = i;
+
+            while (j > left) {
+                uint256 prev = j - 1;
+                if (main[prev] <= keyMain) break;
+
+                main[j] = main[prev];
+                a[j] = a[prev];
+                b[j] = b[prev];
+                c[j] = c[prev];
+                d[j] = d[prev];
+                j = prev;
+            }
+
             main[j] = keyMain;
             a[j] = keyA;
             b[j] = keyB;

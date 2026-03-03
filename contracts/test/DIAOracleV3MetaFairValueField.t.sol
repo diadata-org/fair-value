@@ -1418,3 +1418,176 @@ contract TimestampTest is BaseTest {
         assertEq(result.timestamp, baseTimestamp + 3600, "Should handle large time differences");
     }
 }
+
+/*//////////////////////////////////////////////////////////////
+                    STACK EXHAUSTION TEST SUITE
+//////////////////////////////////////////////////////////////*/
+contract QuickSortStackExhaustionTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_QuickSort_LargeArray_SortedInput() public {
+        // Test worst-case QuickSort scenario: already sorted data
+        // This can cause O(n) recursion depth
+        uint256 numOracles = 200;  // Large enough to potentially cause issues
+        uint256 timestamp = block.timestamp;
+
+        // Create stores with values in sorted order (worst case for QuickSort)
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Values in ascending order - worst case for QuickSort
+            uint256 fairValue = 100 + (i * 10);
+            uint256 usdValue = 1000 + (i * 100);
+            setStoreValues(store, TEST_KEY, fairValue, usdValue, i + 1, 1, timestamp);
+        }
+
+        // Try to get median - may cause stack overflow
+        // If it succeeds, the implementation has proper mitigations
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // If we reach here, the test passes (no stack overflow)
+        // For 200 elements (indices 0-199), sorted values are 100, 110, 120, ..., 2090
+        // Median of even count: average of indices 99 and 100
+        // Index 99: 100 + 99*10 = 1090
+        // Index 100: 100 + 100*10 = 1100
+        // Median: (1090 + 1100) / 2 = 1095
+        assertEq(result.fairValue, 1095, "Should return correct median");
+    }
+
+    function test_QuickSort_LargeArray_ReverseSortedInput() public {
+        // Test worst-case QuickSort scenario: reverse sorted data
+        uint256 numOracles = 200;
+        uint256 timestamp = block.timestamp;
+
+        // Create stores with values in reverse sorted order (also worst case)
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Values in descending order: 100000, 99990, 99980, ..., 98010
+            uint256 fairValue = 100000 - (i * 10);
+            uint256 usdValue = 1000000 - (i * 100);
+            setStoreValues(store, TEST_KEY, fairValue, usdValue, i + 1, 1, timestamp);
+        }
+
+        // Try to get median
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // When sorted, values are: 98010, 98020, ..., 100000
+        // Median (even count 200): average of indices 99 and 100
+        // Index 99: 98010 + 99*10 = 99000
+        // Index 100: 98010 + 100*10 = 99010
+        // Median: (99000 + 99010) / 2 = 99005
+        assertEq(result.fairValue, 99005, "Should return correct median");
+    }
+
+    function test_QuickSort_LargeArray_RandomInput() public {
+        // Test with larger array that has random-like values
+        uint256 numOracles = 300;
+        uint256 timestamp = block.timestamp;
+
+        // Create stores with pseudo-random values
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Use some pseudo-random pattern based on prime numbers
+            uint256 fairValue = 100 + ((i * 17) % 10000);
+            uint256 usdValue = 1000 + ((i * 23) % 100000);
+            setStoreValues(store, TEST_KEY, fairValue, usdValue, i + 1, 1, timestamp);
+        }
+
+        // Try to get median
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Just verify it doesn't overflow - exact median would be hard to calculate
+        assertGt(result.fairValue, 0, "Should return a value");
+    }
+
+   
+
+    function test_QuickSort_SmallArrays_NoOverflow() public {
+        // Test that small arrays work correctly
+        uint256[] memory sizes = new uint256[](6);
+        sizes[0] = 2;
+        sizes[1] = 5;
+        sizes[2] = 10;
+        sizes[3] = 11;
+        sizes[4] = 50;
+        sizes[5] = 100;
+
+        for (uint256 j = 0; j < sizes.length; j++) {
+            // Clear previous stores
+            uint256 numExisting = stores.length;
+            for (uint256 i = 0; i < numExisting; i++) {
+                vm.prank(owner);
+                oracle.removeValueStore(address(stores[i]));
+            }
+            delete stores;
+
+            uint256 numOracles = sizes[j];
+            uint256 timestamp = block.timestamp;
+
+            // Create stores
+            for (uint256 i = 0; i < numOracles; i++) {
+                MockValueStore store = createMockStore();
+                setStoreValues(store, TEST_KEY, i * 100, i * 1000, i + 1, 1, timestamp);
+            }
+
+            // Should work fine
+            DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+            assertGt(result.fairValue, 0, "Should return a value");
+        }
+    }
+
+    function test_QuickSort_AdversarialPattern_AlternatingMinMax() public {
+        // Test with adversarial pattern: alternating min and max values
+        // This could potentially cause poor pivot selection
+        uint256 numOracles = 200;
+        uint256 timestamp = block.timestamp;
+
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            // Alternate between very low and very high values
+            uint256 fairValue = (i % 2 == 0) ? 100 : 1000000;
+            uint256 usdValue = (i % 2 == 0) ? 1000 : 10000000;
+            setStoreValues(store, TEST_KEY, fairValue, usdValue, i + 1, 1, timestamp);
+        }
+
+        // Try to get median
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // With 200 oracles alternating 100 and 1000000, we get:
+        // 100 oracles with value 100, 100 oracles with value 1000000
+        // When sorted: first 100 are 100, next 100 are 1000000
+        // Median (even count): average of indices 99 and 100
+        // Index 99: 100, Index 100: 1000000
+        // Median: (100 + 1000000) / 2 = 500050
+        assertEq(result.fairValue, 500050, "Should return correct median for alternating pattern");
+    }
+
+    function testFuzz_QuickSort_Fuzz(uint128 numOracles) public {
+        // Fuzz test with varying number of oracles
+        numOracles = uint128(bound(numOracles, 2, 500));  // Limit to reasonable range
+        uint256 timestamp = block.timestamp;
+
+        // Clear previous stores
+        uint256 numExisting = stores.length;
+        for (uint256 i = 0; i < numExisting; i++) {
+            vm.prank(owner);
+            oracle.removeValueStore(address(stores[i]));
+        }
+        delete stores;
+
+        // Create stores
+        for (uint256 i = 0; i < numOracles; i++) {
+            MockValueStore store = createMockStore();
+            setStoreValues(store, TEST_KEY, i * 100, i * 1000, i + 1, 1, timestamp);
+        }
+
+        // Should not revert with stack overflow
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+        assertGt(result.fairValue, 0, "Should return a value");
+    }
+}

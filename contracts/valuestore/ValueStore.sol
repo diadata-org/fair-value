@@ -53,16 +53,26 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /* solhint-enable gas-indexed-events */
 
     /// @notice Storage gap for future upgrades (50 slots)
-    /// @dev IMPORTANT: This gap starts at contract-relative slot 1, but absolute slot 7 in the proxy.
-    ///      Parent contracts occupy slots 0-5:
-    ///      - Initializable: 5 slots (_initialized, _initializing, __gap[3])
-    ///      - OwnableUpgradeable: 1 slot (_owner)
-    ///      ValueStore storage layout (absolute slots in proxy):
-    ///      Slot | Label              | Type
-    ///      -----|--------------------|-----------------------------------------
-    ///        6  | _data              | mapping(string => struct StoredValue)
-    ///       7-56| __gap              | 50 slots reserved for future upgrades
-    ///      When adding new state variables in upgrades, place them BEFORE __gap.
+    /// @dev Storage layout (conceptual):
+    ///      Parent contracts with storage: Initializable, OwnableUpgradeable
+    ///      Parent contracts without storage: UUPSUpgradeable (functions only)
+    ///      Interfaces: IERC165, IValueStore (no storage)
+    ///
+    ///      Storage order in proxy:
+    ///      1. Initializable storage (_initialized, _initializing, __gap[3])
+    ///      2. OwnableUpgradeable storage (_owner)
+    ///      3. ValueStore storage (this contract's state variables)
+    ///      4. __gap at the end (reserved for future upgrades)
+    ///
+    ///      IMPORTANT UPGRADE RULES:
+    ///      - New state variables must be added BEFORE __gap
+    ///      - Reduce __gap size by the number of new variables added
+    ///      - Never remove, rename, or change the type of existing variables
+    ///      - Run `forge inspect ValueStore storage-layout` for exact slot positions
+    ///
+    ///      Current layout (contract-relative to ValueStore):
+    ///      - Slot 0: _data mapping
+    ///      - Slot 1+: __gap[50] (reserve for future state variables)
     uint256[50] private __gap;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -73,10 +83,12 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @notice Initializes the contract with owner
     /// @dev Replaces constructor for upgradeable contracts. Uses reinitializer(1)
     ///      to allow future upgrades to add new initialization logic with version 2, 3, etc.
+    ///      Initializes parent contracts in the correct order: Initializable, OwnableUpgradeable, UUPSUpgradeable.
     /// @param initialOwner The address that will own the contract
     function initialize(address initialOwner) public reinitializer(1) {
         if (initialOwner == address(0)) revert ZeroAddress();
         __Ownable_init(initialOwner);
+        __UUPSUpgradeable_init();
     }
 
     /// @notice Authorizes upgrade to new implementation
