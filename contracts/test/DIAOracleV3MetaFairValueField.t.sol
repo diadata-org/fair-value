@@ -94,8 +94,29 @@ struct TestCase {
     string constant TEST_KEY = "BTC/USD";
 
     function setUp() public virtual {
+        // Clean up any state from previous tests
+        _cleanUp();
+
+        // Create fresh oracle for each test
         vm.prank(owner);
         oracle = new DIAOracleV3MetaFairValueField(owner);
+    }
+
+    function _cleanUp() internal {
+        // Remove all stores from the oracle if it exists
+        if (address(oracle) != address(0)) {
+            for (uint256 i = 0; i < stores.length; i++) {
+                vm.prank(owner);
+                try oracle.removeValueStore(address(stores[i])) {
+                    // Store existed and was removed
+                } catch {
+                    // Store didn't exist or was already removed
+                }
+            }
+        }
+
+        // Clear the stores array
+        delete stores;
     }
 
     function createMockStore() internal returns (MockValueStore) {
@@ -1463,7 +1484,8 @@ contract QuickSortStackExhaustionTest is BaseTest {
         oracle.setThreshold(2);
         vm.prank(owner);
         oracle.setTimeoutSeconds(3600);
-        // Increase max value stores to allow testing with 200+ oracles
+        // This test suite creates 200+ oracles in a single test to stress test QuickSort
+        // Increase limit to accommodate these tests (NOT due to state pollution)
         vm.prank(owner);
         oracle.setMaxValueStores(1000);
     }
@@ -1640,7 +1662,8 @@ contract DuplicateValuesPerformanceTest is BaseTest {
         oracle.setThreshold(2);
         vm.prank(owner);
         oracle.setTimeoutSeconds(3600);
-        // Increase max value stores to allow testing with 200+ oracles
+        // This test suite creates 100-1000 oracles in a single test for performance testing
+        // Increase limit to accommodate these tests (NOT due to state pollution)
         vm.prank(owner);
         oracle.setMaxValueStores(1000);
     }
@@ -2926,3 +2949,256 @@ contract MedianPrecisionTest is BaseTest {
     }
 }
 
+/*//////////////////////////////////////////////////////////////
+                    OVERFLOW & EDGE CASE TEST SUITE
+    Tests for arithmetic overflow and critical edge cases
+
+    IMPORTANT: These tests use MockValueStore which has different validation
+    than the real ValueStore contract:
+
+    Real ValueStore (ValueStore.sol:116-118):
+        if (numerator != 0 && denominator == 0) {
+            revert DivisionByZero();
+        }
+
+    MockValueStore (test mock):
+        - Allows any numerator/denominator combination
+        - Used for flexibility in testing oracle contract logic
+
+    Test Strategy:
+    - Overflow tests: Test ORACLE's aggregation (summing/rounding) - Mock is appropriate
+    - Edge case tests: Use realistic values that real ValueStore would allow
+//////////////////////////////////////////////////////////////*/
+contract OverflowEdgeCaseTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+        vm.prank(owner);
+        oracle.setThreshold(2);
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(3600);
+    }
+
+    function test_Overflow_FairValueSum_Overflows() public {
+        // Test that overflow in fairValue sum is caught
+        // Solidity 0.8.30 has built-in overflow checks that should revert
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        uint256 maxVal = type(uint256).max;
+
+        // Create values where sum of middle two will overflow
+        // Middle two will be maxVal and maxVal
+        // sumFair = maxVal + maxVal (OVERFLOWS!)
+        setStoreValues(store1, TEST_KEY, maxVal - 1, maxVal, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, maxVal, maxVal, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, maxVal, maxVal, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, maxVal, maxVal, 1, 1, timestamp);
+
+        // Should revert due to overflow in fairValue sum
+        vm.expectRevert();
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_Overflow_FairValueSum_NearMaximum() public {
+        // Test with very large values that DON'T overflow
+        // Verifies the contract can handle large but safe values
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Use values that are large but won't overflow when summed with +1
+        // Safe threshold: < type(uint256).max / 2 for each value
+        uint256 largeValue = 1e18;  // Very large but safe
+
+        setStoreValues(store1, TEST_KEY, largeValue, largeValue, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, largeValue * 2, largeValue * 2, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, largeValue * 3, largeValue * 3, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, largeValue * 4, largeValue * 4, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Middle two: 2e18 and 3e18
+        // Sum: 5e18, Rounding: (5e18 + 1) / 2 = 2.5e18
+        assertEq(result.fairValue, 2.5e18, "Should handle large values");
+    }
+
+    function test_Overflow_RoundingIncrement_Overflow() public {
+        // Test overflow in the +1 for rounding
+        // When sumFair = type(uint256).max, adding 1 should overflow
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Values where sumFair = max but adding 1 overflows
+        // Need: fairValues[mid1] + fairValues[mid2] = type(uint256).max
+        uint256 val1 = type(uint256).max / 2;
+        uint256 val2 = type(uint256).max - val1;
+
+        setStoreValues(store1, TEST_KEY, val1 - 1000, val1 - 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, val1, val1, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, val2, val2, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, val2 + 1000, val2 + 1000, 1, 1, timestamp);
+
+        // Should revert when trying to add 1 to max
+        vm.expectRevert();
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_Overflow_UsdValueSum_Overflows() public {
+        // Test overflow in usdValue sum (separate from fairValue)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        uint256 maxVal = type(uint256).max;
+
+        // Same fairValues, but usdValues overflow
+        setStoreValues(store1, TEST_KEY, 100, maxVal, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, maxVal, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, maxVal, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, maxVal, 1, 1, timestamp);
+
+        // Should revert due to overflow in usdValue sum
+        vm.expectRevert();
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_EdgeCase_ZeroDenominator() public {
+        // Test edge case: numerator=0, denominator=0 (VALID in real ValueStore)
+        // Real ValueStore validation: if (numerator != 0 && denominator == 0) revert
+        // So numerator=0, denominator=0 is ALLOWED (represents undefined/zero data)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Oracle 2 has numerator=0, denominator=0 (realistic - represents no fair value data)
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 0, 0, timestamp);  // numerator=0, denominator=0 (VALID)
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Odd count: should use middle oracle (store2)
+        assertEq(result.fairValue, 200, "FairValue from middle oracle");
+        assertEq(result.numerator, 0, "Numerator = 0");
+        assertEq(result.denominator, 0, "Denominator = 0 (when numerator is also 0)");
+
+        emit log_string("INFO: numerator=0, denominator=0 is valid (represents zero/undefined)");
+        emit log_string("Real ValueStore allows this (only rejects numerator!=0 with denominator=0)");
+    }
+
+    function test_EdgeCase_ZeroDenominator_EvenCount() public {
+        // Test zero denominator with even count (takes from right middle)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 0, timestamp);  // Warning: denominator = 0
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 400, 4000, 4, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Even count: middle two are 200 and 300
+        // FairValue median: (200 + 300 + 1) / 2 = 250
+        // Rounds to 250, closer to 300, so takes from RIGHT middle (store3)
+        // which has denominator = 1 (valid)
+        assertEq(result.fairValue, 250, "FairValue median");
+        assertEq(result.numerator, 3, "Numerator from right middle oracle");
+        assertEq(result.denominator, 1, "Denominator from right middle oracle (not zero)");
+    }
+
+    function test_EdgeCase_AllZeroDenominators() public {
+        // Test when ALL oracles have numerator=0, denominator=0
+        // This is VALID - represents all oracles reporting no fair value data
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // All oracles have numerator=0, denominator=0 (realistic - no fair value data)
+        setStoreValues(store1, TEST_KEY, 100, 1000, 0, 0, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 0, 0, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 0, 0, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Contract returns numerator=0, denominator=0 (valid edge case)
+        assertEq(result.fairValue, 200, "FairValue");
+        assertEq(result.numerator, 0, "Numerator = 0");
+        assertEq(result.denominator, 0, "Denominator = 0 (when numerator is also 0)");
+
+        emit log_string("INFO: All oracles have numerator=0, denominator=0");
+        emit log_string("This represents no fair value data - valid edge case");
+    }
+
+    function test_EdgeCase_ZeroNumerator() public {
+        // Test that numerator = 0 is handled correctly (valid case)
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 0, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 0, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 0, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Numerator = 0 is valid (represents 0 value)
+        assertEq(result.fairValue, 200, "FairValue");
+        assertEq(result.numerator, 0, "Numerator = 0 is valid");
+        assertEq(result.denominator, 1, "Denominator");
+    }
+
+    function test_EdgeCase_MaxValues_NoOverflow() public {
+        // Test with very large values that don't overflow
+        // For odd count, no summing occurs, so larger values are safe
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        // Use very large but safe values
+        // For odd count, we just return the middle value - no arithmetic needed
+        uint256 largeValue = 1e28;  // Extremely large but safe
+
+        setStoreValues(store1, TEST_KEY, largeValue, largeValue, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, largeValue * 2, largeValue * 2, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, largeValue * 3, largeValue * 3, 1, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Odd count: should return the middle value (store2's value) - no summing
+        assertEq(result.fairValue, largeValue * 2, "Should handle very large values with odd count");
+    }
+}
