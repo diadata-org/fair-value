@@ -37,6 +37,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     uint256 private constant _DEFAULT_MAX_VALUE_STORES = 100;
 
     error InvalidThreshold(uint256);
+    error InvalidMaxValueStores(uint256);
     error InvalidTimeOut(uint256);
     error TimeoutExceedsLimit(uint256);
     error ThresholdNotMet(uint256, uint256);
@@ -161,9 +162,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     /// @param newMaxValueStores The new maximum value stores
     /// @dev Reverts if newMaxValueStores is zero or less than current count
     function setMaxValueStores(uint256 newMaxValueStores) external onlyOwner {
-        if (newMaxValueStores == 0) revert InvalidThreshold(newMaxValueStores);
+        if (newMaxValueStores == 0) revert InvalidMaxValueStores(newMaxValueStores);
         if (newMaxValueStores < numValueStores) {
-            revert InvalidThreshold(newMaxValueStores); // Cannot set below current count
+            revert InvalidMaxValueStores(newMaxValueStores); // Cannot set below current count
         }
         uint256 oldMaxValueStores = maxValueStores;
         maxValueStores = newMaxValueStores;
