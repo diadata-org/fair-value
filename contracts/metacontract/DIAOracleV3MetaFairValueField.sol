@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.30;
+pragma solidity 0.8.34;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import {IValueStore} from "../interfaces/IValueStore.sol";
 
 /// @title DIAOracleV3MetaFairValueField
@@ -43,6 +44,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error OracleExists();
     error OracleNotFound();
     error MaxValueStoresReached(uint256);
+    error InvalidValueStoreInterface(address store);
 
     /// @notice Emitted when timeout seconds is changed
     /// @param oldTimeoutSeconds The previous timeout value
@@ -84,6 +86,12 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == newStore) revert OracleExists();
         }
+
+        // Verify that the store implements IValueStore interface via ERC165
+        if (!_supportsIValueStore(newStore)) {
+            revert InvalidValueStoreInterface(newStore);
+        }
+
         valueStores[numValueStores++] = newStore;
         emit ValueStoreAdded(newStore, numValueStores - 1);
     }
@@ -101,6 +109,23 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             }
         }
         revert OracleNotFound();
+    }
+
+    /// @notice Check if a contract supports the IValueStore interface
+    /// @param store The address to check
+    /// @return bool True if the contract supports IValueStore interface
+    function _supportsIValueStore(address store) private view returns (bool) {
+        // First check if address has code (EOAs will fail this check)
+        if (store.code.length == 0) {
+            return false;
+        }
+
+        // Check if address supports ERC165 and IValueStore interface
+        try IERC165(store).supportsInterface(type(IValueStore).interfaceId) returns (bool supported) {
+            return supported;
+        } catch {
+            return false;
+        }
     }
 
     /// @notice Set the minimum number of valid responses required
@@ -261,10 +286,11 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             uint256 sumUsd = usdValues[mid1] + usdValues[mid2];
             usdValue = (sumUsd + 1) / 2;
 
-            // Take numerator/denominator from the RIGHT middle oracle
-            // This ensures consistency - all data comes from the same oracle
-            numerator = nums[mid2];
-            denominator = dens[mid2];
+            uint256 sumNum = nums[mid1] + nums[mid2];
+            numerator = (sumNum + 1) / 2;
+
+            uint256 sumDen = dens[mid1] + dens[mid2];
+            denominator = (sumDen + 1) / 2;
 
             medianTimestamp = timestamps[mid2];
         }

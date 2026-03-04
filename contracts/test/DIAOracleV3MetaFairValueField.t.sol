@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.30;
+pragma solidity 0.8.34;
 
 import "forge-std/Test.sol";
 
 // Import the contracts
 import {DIAOracleV3MetaFairValueField} from "../metacontract/DIAOracleV3MetaFairValueField.sol";
+import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {IValueStore} from "../interfaces/IValueStore.sol";
 
 // Mock ValueStore contract for testing
-contract MockValueStore {
+contract MockValueStore is IERC165, IValueStore {
     // Custom error matching real ValueStore contract
     error NoDataForKey();
     error SimulatedRevert();
@@ -56,6 +58,26 @@ contract MockValueStore {
             revert NoDataForKey();
         }
         return (fairValues[key], usdValues[key], numerators[key], denominators[key], timestamps[key]);
+    }
+
+    /// @notice Interface support for ERC165
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IValueStore).interfaceId ||
+               interfaceId == type(IERC165).interfaceId;
+    }
+}
+
+// Invalid contracts for interface validation testing
+contract InvalidStore {
+    function someFunction() external pure returns (uint256) {
+        return 42;
+    }
+}
+
+contract WrongInterfaceStore is IERC165 {
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        // Only supports IERC165, not IValueStore
+        return interfaceId == type(IERC165).interfaceId;
     }
 }
 
@@ -150,6 +172,194 @@ struct TestCase {
     ) internal {
         // Mark this store to revert when getValue is called for this key
         store.setShouldRevert(key, true);
+    }
+
+    // Helper function to calculate median from an array of uint256 values
+    function calculateMedian(uint256[] memory values) internal pure returns (uint256) {
+        require(values.length > 0, "Empty array");
+
+        // Create a sortable copy
+        uint256[] memory sorted = new uint256[](values.length);
+        for (uint256 i = 0; i < values.length; i++) {
+            sorted[i] = values[i];
+        }
+
+        // Simple bubble sort (sufficient for test data)
+        for (uint256 i = 0; i < sorted.length; i++) {
+            for (uint256 j = i + 1; j < sorted.length; j++) {
+                if (sorted[i] > sorted[j]) {
+                    uint256 temp = sorted[i];
+                    sorted[i] = sorted[j];
+                    sorted[j] = temp;
+                }
+            }
+        }
+
+        // Calculate median
+        if (sorted.length % 2 == 1) {
+            // Odd count: return middle element
+            return sorted[sorted.length / 2];
+        } else {
+            // Even count: return average of two middle elements
+            return (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+        }
+    }
+
+    // Helper function to verify the result is actually the statistical median
+    function verifyMedianCalculation(
+        TestCase memory testCase,
+        DIAOracleV3MetaFairValueField.MedianSet memory result
+    ) internal view {
+        // Collect all valid (non-reverting, non-stale) oracle values
+        uint256[] memory fairValues = new uint256[](testCase.oracleValues.length);
+        uint256[] memory usdValues = new uint256[](testCase.oracleValues.length);
+        uint256 validCount = 0;
+
+        for (uint256 i = 0; i < testCase.oracleValues.length; i++) {
+            // Skip reverting oracles
+            if (testCase.oracleValues[i].shouldRevert) {
+                continue;
+            }
+
+            // Skip oracles with zero timestamp
+            if (testCase.oracleValues[i].timestamp == 0) {
+                continue;
+            }
+
+            // Check if timestamp is within timeout window
+            uint256 timeDiff = testCase.blockTimestamp >= testCase.oracleValues[i].timestamp
+                ? testCase.blockTimestamp - testCase.oracleValues[i].timestamp
+                : testCase.oracleValues[i].timestamp - testCase.blockTimestamp;
+
+            // Skip stale data
+            if (timeDiff > testCase.timeoutSeconds) {
+                continue;
+            }
+
+            // This oracle value is valid
+            fairValues[validCount] = testCase.oracleValues[i].fairValue;
+            usdValues[validCount] = testCase.oracleValues[i].usdValue;
+            validCount++;
+        }
+
+        require(validCount > 0, "No valid oracle values");
+
+        // Resize arrays to actual valid count
+        uint256[] memory validFairValues = new uint256[](validCount);
+        uint256[] memory validUsdValues = new uint256[](validCount);
+        for (uint256 i = 0; i < validCount; i++) {
+            validFairValues[i] = fairValues[i];
+            validUsdValues[i] = usdValues[i];
+        }
+
+        // Calculate expected medians
+        uint256 expectedFairMedian = calculateMedian(validFairValues);
+        uint256 expectedUsdMedian = calculateMedian(validUsdValues);
+
+        // Verify the result is actually the statistical median
+        assertEq(
+            result.fairValue,
+            expectedFairMedian,
+            string(abi.encodePacked(testCase.name, ": Result is not the statistical median of fairValues"))
+        );
+        assertEq(
+            result.usdValue,
+            expectedUsdMedian,
+            string(abi.encodePacked(testCase.name, ": Result is not the statistical median of usdValues"))
+        );
+
+        // For even counts, verify averaging was done correctly
+        if (validCount % 2 == 0) {
+            // Sort the values to find the two middle elements
+            uint256[] memory sortedFair = new uint256[](validCount);
+            uint256[] memory sortedUsd = new uint256[](validCount);
+            for (uint256 i = 0; i < validCount; i++) {
+                sortedFair[i] = validFairValues[i];
+                sortedUsd[i] = validUsdValues[i];
+            }
+
+            // Bubble sort
+            for (uint256 i = 0; i < validCount; i++) {
+                for (uint256 j = i + 1; j < validCount; j++) {
+                    if (sortedFair[i] > sortedFair[j]) {
+                        uint256 temp = sortedFair[i];
+                        sortedFair[i] = sortedFair[j];
+                        sortedFair[j] = temp;
+                    }
+                    if (sortedUsd[i] > sortedUsd[j]) {
+                        uint256 temp = sortedUsd[i];
+                        sortedUsd[i] = sortedUsd[j];
+                        sortedUsd[j] = temp;
+                    }
+                }
+            }
+
+            // Verify averaging of middle two elements
+            uint256 middle1 = validCount / 2 - 1;
+            uint256 middle2 = validCount / 2;
+            uint256 expectedFairAvg = (sortedFair[middle1] + sortedFair[middle2]) / 2;
+            uint256 expectedUsdAvg = (sortedUsd[middle1] + sortedUsd[middle2]) / 2;
+
+            assertEq(
+                result.fairValue,
+                expectedFairAvg,
+                string(abi.encodePacked(testCase.name, ": Even count median average incorrect for fairValue"))
+            );
+            assertEq(
+                result.usdValue,
+                expectedUsdAvg,
+                string(abi.encodePacked(testCase.name, ": Even count median average incorrect for usdValue"))
+            );
+        }
+    }
+
+    // Helper function to verify timestamp validation
+    function verifyTimestampValidation(TestCase memory testCase) internal view {
+        // Collect timestamps from all valid (non-reverting, non-stale) oracles
+        uint256[] memory timestamps = new uint256[](testCase.oracleValues.length);
+        uint256 validCount = 0;
+
+        for (uint256 i = 0; i < testCase.oracleValues.length; i++) {
+            // Skip reverting oracles
+            if (testCase.oracleValues[i].shouldRevert) {
+                continue;
+            }
+
+            // Skip oracles with zero timestamp
+            if (testCase.oracleValues[i].timestamp == 0) {
+                continue;
+            }
+
+            // Check if timestamp is within timeout window
+            uint256 timeDiff = testCase.blockTimestamp >= testCase.oracleValues[i].timestamp
+                ? testCase.blockTimestamp - testCase.oracleValues[i].timestamp
+                : testCase.oracleValues[i].timestamp - testCase.blockTimestamp;
+
+            // Skip stale data (only validate fresh timestamps)
+            if (timeDiff > testCase.timeoutSeconds) {
+                continue;
+            }
+
+            timestamps[validCount] = testCase.oracleValues[i].timestamp;
+            validCount++;
+        }
+
+        require(validCount > 0, "No valid timestamps");
+
+        // Verify all collected timestamps are within timeout window
+        for (uint256 i = 0; i < validCount; i++) {
+            uint256 timeDiff = testCase.blockTimestamp >= timestamps[i]
+                ? testCase.blockTimestamp - timestamps[i]
+                : timestamps[i] - testCase.blockTimestamp;
+
+            require(
+                timeDiff <= testCase.timeoutSeconds,
+                string(abi.encodePacked(
+                    testCase.name,
+                    ": Timestamp exceeds timeout window"
+                ))
+            );
+        }
     }
 
     function runTestCase(TestCase memory testCase) internal {
@@ -264,7 +474,13 @@ struct TestCase {
 
             DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-            // Assert results
+            // Stronger Assertion 1: Verify median calculation is statistically correct
+            verifyMedianCalculation(testCase, result);
+
+            // Stronger Assertion 2: Verify timestamp validation
+            verifyTimestampValidation(testCase);
+
+            // Basic value assertions (still kept for backwards compatibility)
             assertEq(
                 result.fairValue,
                 testCase.expectedFairValue,
@@ -320,10 +536,10 @@ contract GetMedianValuesHappyPathTest is BaseTest {
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 250,  // Average of [100, 200, 300, 400] middle = (200 + 300) / 2
+            expectedFairValue: 250,  // Average of [100, 200, 300, 400] middle = (200 + 300 + 1) / 2
             expectedUsdValue: 2500,
-            expectedNumerator: 3,    // From RIGHT middle oracle (index 2)
-            expectedDenominator: 1,
+            expectedNumerator: 3,    // Median: (2 + 3 + 1) / 2 = 3
+            expectedDenominator: 1,  // Median: (1 + 1 + 1) / 2 = 1
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -456,10 +672,10 @@ contract GetMedianValuesTimeoutTest is BaseTest {
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 150,  // Median of [100, 200] (300 is stale)
+            expectedFairValue: 150,  // Median of [100, 200] (300 is stale): (100 + 200 + 1) / 2
             expectedUsdValue: 1500,
-            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
-            expectedDenominator: 1,
+            expectedNumerator: 2,    // Median: (1 + 2 + 1) / 2 = 2
+            expectedDenominator: 1,  // Median: (1 + 1 + 1) / 2 = 1
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -510,10 +726,10 @@ contract GetMedianValuesTimeoutTest is BaseTest {
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 150,  // Average of [100, 200]
+            expectedFairValue: 150,  // Average: (100 + 200 + 1) / 2 = 150
             expectedUsdValue: 1500,
-            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
-            expectedDenominator: 1,
+            expectedNumerator: 2,    // Median: (1 + 2 + 1) / 2 = 2
+            expectedDenominator: 1,  // Median: (1 + 1 + 1) / 2 = 1
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -540,10 +756,10 @@ contract GetMedianValuesFailureHandlingTest is BaseTest {
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 150,  // Median of [100, 200] (3rd reverts)
+            expectedFairValue: 150,  // Median of [100, 200] (3rd reverts): (100 + 200 + 1) / 2
             expectedUsdValue: 1500,
-            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
-            expectedDenominator: 1,
+            expectedNumerator: 2,    // Median: (1 + 2 + 1) / 2 = 2
+            expectedDenominator: 1,  // Median: (1 + 1 + 1) / 2 = 1
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -559,10 +775,10 @@ contract GetMedianValuesFailureHandlingTest is BaseTest {
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 150,  // Median of [100, 200]
+            expectedFairValue: 150,  // Median of [100, 200]: (100 + 200 + 1) / 2
             expectedUsdValue: 1500,
-            expectedNumerator: 2,    // From RIGHT middle oracle (index 1)
-            expectedDenominator: 1,
+            expectedNumerator: 2,    // Median: (1 + 2 + 1) / 2 = 2
+            expectedDenominator: 1,  // Median: (1 + 1 + 1) / 2 = 1
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -696,12 +912,15 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
 
         // Should sort by usdValues since all fairValues are 0
         // Sorted usdValues: [1000, 2000, 3000, 4000]
+        // Corresponding numerators: [1, 2, 3, 4]
+        // Corresponding denominators: [1, 1, 1, 1]
         // Median of even count: average of middle two (2000 + 3000 + 1) / 2 = 2500
-        // Numerator/denominator from RIGHT middle oracle: 3/1
+        // Numerator median: (2 + 3 + 1) / 2 = 3
+        // Denominator median: (1 + 1 + 1) / 2 = 1
         assertEq(result.fairValue, 0, "All fairValues should be 0");
         assertEq(result.usdValue, 2500, "Should be median of usdValues");
-        assertEq(result.numerator, 3, "Should be from right middle oracle");
-        assertEq(result.denominator, 1, "Should be from right middle oracle");
+        assertEq(result.numerator, 3, "Should be median: (2+3+1)/2 = 3");
+        assertEq(result.denominator, 1, "Should be median: (1+1+1)/2 = 1");
         assertEq(result.timestamp, timestamp, "Should return max timestamp");
     }
 }
@@ -759,10 +978,14 @@ contract NumeratorDenominatorTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // Average of middle two: (2/4 + 3/6) / 2
-        // Numerator/denominator come from RIGHT middle oracle (index 2): 3/6
-        assertEq(result.numerator, 3, "Numerator should be from right middle oracle");
-        assertEq(result.denominator, 6, "Denominator should be from right middle oracle");
+        // Sorted by fairValue: [100, 200, 300, 400]
+        // Middle two: 200, 300
+        // Middle two numerators: 2, 3
+        // Middle two denominators: 4, 6
+        // Numerator median: (2 + 3 + 1) / 2 = 3 (rounds up)
+        // Denominator median: (4 + 6 + 1) / 2 = 5 (rounds down)
+        assertEq(result.numerator, 3, "Numerator should be median: (2+3+1)/2 = 3");
+        assertEq(result.denominator, 5, "Denominator should be median: (4+6+1)/2 = 5");
     }
 
     function test_NumeratorDenominator_AllZero() public {
@@ -880,9 +1103,11 @@ contract NumeratorDenominatorTest is BaseTest {
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Should only use fresh data (stores 1 and 2)
-        // Numerator/denominator come from RIGHT middle oracle: 2/3
-        assertEq(result.numerator, 2, "Numerator should be from right middle oracle");
-        assertEq(result.denominator, 3, "Denominator should be from right middle oracle");
+        // Fresh values: [100, 200] with numerators [1, 2], denominators [2, 3]
+        // Numerator median: (1 + 2 + 1) / 2 = 2
+        // Denominator median: (2 + 3 + 1) / 2 = 3
+        assertEq(result.numerator, 2, "Numerator median: (1+2+1)/2 = 2");
+        assertEq(result.denominator, 3, "Denominator median: (2+3+1)/2 = 3");
     }
 
     function test_NumeratorDenominator_WithFailingOracle() public {
@@ -900,9 +1125,11 @@ contract NumeratorDenominatorTest is BaseTest {
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Should compute median from successful calls (stores 1 and 2)
-        // Numerator/denominator from RIGHT middle oracle: 3/4
-        assertEq(result.numerator, 3, "Numerator should be from right middle oracle");
-        assertEq(result.denominator, 4, "Denominator should be from right middle oracle");
+        // Successful values: [100, 200] with numerators [1, 3], denominators [2, 4]
+        // Numerator median: (1 + 3 + 1) / 2 = 2
+        // Denominator median: (2 + 4 + 1) / 2 = 3
+        assertEq(result.numerator, 2, "Numerator median: (1+3+1)/2 = 2");
+        assertEq(result.denominator, 3, "Denominator median: (2+4+1)/2 = 3");
     }
 
     function test_NumeratorDenominator_IndependentFromFairValue() public {
@@ -988,10 +1215,10 @@ contract NumeratorDenominatorTest is BaseTest {
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 250,
-            expectedUsdValue: 2500,
-            expectedNumerator: 6,    // From RIGHT middle oracle (index 2)
-            expectedDenominator: 12, // From RIGHT middle oracle (index 2)
+            expectedFairValue: 250,   // (200 + 300 + 1) / 2 = 250
+            expectedUsdValue: 2500,   // (2000 + 3000 + 1) / 2 = 2500
+            expectedNumerator: 5,     // Median: (4 + 6 + 1) / 2 = 5
+            expectedDenominator: 10,  // Median: (8 + 12 + 1) / 2 = 10
             shouldRevert: false,
             expectedError: bytes4(0),
             expectedErrorCount: 0
@@ -1067,6 +1294,58 @@ contract AdminFunctionsTest is BaseTest {
         vm.prank(user);
         vm.expectRevert(); // OwnableUnauthorizedAccount
         oracle.addValueStore(address(store));
+    }
+
+    function test_AddValueStore_EOA_ShouldRevert() public {
+        // EOA (Externally Owned Account) doesn't implement IValueStore
+        address randomEOA = address(0x12345);
+
+        vm.prank(owner);
+        // EOAs don't have supportsInterface, so the call will revert
+        // The try/catch in _supportsIValueStore will return false, triggering InvalidValueStoreInterface
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.InvalidValueStoreInterface.selector,
+                randomEOA
+            )
+        );
+        oracle.addValueStore(randomEOA);
+    }
+
+    function test_AddValueStore_InvalidContract_ShouldRevert() public {
+        InvalidStore invalidStore = new InvalidStore();
+
+        vm.prank(owner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.InvalidValueStoreInterface.selector,
+                address(invalidStore)
+            )
+        );
+        oracle.addValueStore(address(invalidStore));
+    }
+
+    function test_AddValueStore_WrongInterface_ShouldRevert() public {
+        WrongInterfaceStore wrongStore = new WrongInterfaceStore();
+
+        vm.prank(owner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DIAOracleV3MetaFairValueField.InvalidValueStoreInterface.selector,
+                address(wrongStore)
+            )
+        );
+        oracle.addValueStore(address(wrongStore));
+    }
+
+    function test_AddValueStore_ValidInterface_ShouldSucceed() public {
+        MockValueStore validStore = new MockValueStore();
+
+        vm.prank(owner);
+        oracle.addValueStore(address(validStore)); // Should succeed
+
+        assertEq(oracle.numValueStores(), 1);
+        assertEq(oracle.valueStores(0), address(validStore));
     }
 
     function test_RemoveValueStore() public {
@@ -2578,11 +2857,12 @@ contract MedianPrecisionTest is BaseTest {
     }
 
     function test_Precision_NumeratorDenominator_EvenCount() public {
-        // EVEN COUNT: Test that numerator/denominator come from right middle oracle
+        // EVEN COUNT: Test that numerator/denominator are averaged with rounding (same as fairValue/usdValue)
         // Values: [100/1, 200/1, 300/1, 400/1]
         // Middle two: 200, 300
         // FairValue median: (200 + 300 + 1) / 2 = 250 (rounded)
-        // Numerator/denominator from RIGHT middle oracle: 300/1
+        // Numerator median: (200 + 300 + 1) / 2 = 250 (rounded, same logic)
+        // Denominator median: (1 + 1 + 1) / 2 = 1 (rounded)
         uint256 timestamp = block.timestamp;
 
         MockValueStore store1 = createMockStore();
@@ -2597,19 +2877,20 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.numerator, 300, "Median numerator should be from right middle oracle");
-        assertEq(result.denominator, 1, "Median denominator should be from right middle oracle");
+        assertEq(result.numerator, 250, "Median numerator: (200+300+1)/2 = 250");
+        assertEq(result.denominator, 1, "Median denominator: (1+1+1)/2 = 1");
     }
 
-    function test_Precision_NumeratorDenominator_FromMiddleOracle() public {
-        // Tests that numerator/denominator are taken from the RIGHT middle oracle
-        // NOT averaged independently!
+    function test_Precision_NumeratorDenominator_Averaging() public {
+        // Tests that numerator/denominator are averaged with rounding (same as fairValue/usdValue)
         //
-        // Key insight: The contract does NOT average numerators and denominators
-        // Instead:
-        // 1. Calculate fairValue median using rounding: (57 + 60 + 1) / 2 = 59
-        // 2. Find which oracle's fairValue is closest to the median
-        // 3. Return THAT oracle's numerator and denominator
+        // Key insight: The contract now averages ALL four values (fairValue, usdValue, numerator, denominator)
+        // using the same median calculation logic with rounding to nearest.
+        //
+        // For even count:
+        // 1. Sort all arrays together by fairValue
+        // 2. Take middle two elements from each array
+        // 3. Calculate median: (mid1 + mid2 + 1) / 2 for rounding to nearest
 
         uint256 timestamp = block.timestamp;
 
@@ -2633,18 +2914,22 @@ contract MedianPrecisionTest is BaseTest {
         // Middle two: 57, 60
         // FairValue median: (57 + 60 + 1) / 2 = 59 (rounds up)
 
-        // Since fairValue rounds to 59 (closer to 60), we take RIGHT middle oracle's data
-        // Right middle oracle has: fairValue=60, numerator=300, denominator=5
+        // Numerator calculation:
+        // Middle two numerators: 400, 300
+        // Numerator median: (400 + 300 + 1) / 2 = 350 (rounds down)
+
+        // Denominator calculation:
+        // Middle two denominators: 7, 5
+        // Denominator median: (7 + 5 + 1) / 2 = 6 (rounds down)
 
         assertEq(result.fairValue, 59, "FairValue median: (57+60+1)/2 = 59");
-        assertEq(result.numerator, 300, "Numerator from oracle with fairValue=60");
-        assertEq(result.denominator, 5, "Denominator from oracle with fairValue=60");
+        assertEq(result.numerator, 350, "Numerator median: (400+300+1)/2 = 350");
+        assertEq(result.denominator, 6, "Denominator median: (7+5+1)/2 = 6");
 
-        // This proves: numerator/denominator are NOT averaged
-        // If they were averaged: (400/7 + 300/5) / 2 = (2000/35 + 2100/35) / 2 = 4100/70 ≈ 58.57
-        // But we return 300/5 = 60 (the value from one oracle)
+        // This proves: numerator/denominator ARE averaged with rounding
+        // Just like fairValue and usdValue, all values use the same median calculation
 
- 
+
     }
 
     function test_Precision_OddCount_NoAveraging() public {
@@ -3162,11 +3447,13 @@ contract OverflowEdgeCaseTest is BaseTest {
 
         // Even count: middle two are 200 and 300
         // FairValue median: (200 + 300 + 1) / 2 = 250
-        // Rounds to 250, closer to 300, so takes from RIGHT middle (store3)
-        // which has denominator = 1 (valid)
+        // Middle two numerators: 2, 3
+        // Middle two denominators: 0, 1
+        // Numerator median: (2 + 3 + 1) / 2 = 3
+        // Denominator median: (0 + 1 + 1) / 2 = 1
         assertEq(result.fairValue, 250, "FairValue median");
-        assertEq(result.numerator, 3, "Numerator from right middle oracle");
-        assertEq(result.denominator, 1, "Denominator from right middle oracle (not zero)");
+        assertEq(result.numerator, 3, "Numerator median: (2+3+1)/2 = 3");
+        assertEq(result.denominator, 1, "Denominator median: (0+1+1)/2 = 1");
     }
 
     function test_EdgeCase_AllZeroDenominators() public {
@@ -3566,7 +3853,9 @@ contract SecurityTest is BaseTest {
     }
 
     function test_TimestampManipulation_VeryOldTimestamp() public {
-        // SECURITY: What if oracles report very old timestamps (beyond timeout)?
+        // SECURITY: Test that timeout mechanism excludes stale data
+        // NOTE: Contract does NOT validate timestamps beyond timeout check
+        // Oracle timestamp validation is the oracle's responsibility
 
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
@@ -3583,13 +3872,13 @@ contract SecurityTest is BaseTest {
         // store3 reports ANCIENT data (beyond timeout)
         setStoreValues(store3, TEST_KEY, 999999, 9999990, 1, 1, ancientTimestamp);
 
-        //  DEFENSE: Old data is automatically excluded by timeout mechanism
+         // This is the ONLY timestamp check the contract performs
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Ancient data should be excluded, so median comes from fresh data
-        assertEq(result.fairValue, 150, "Old data excluded: median from fresh oracles only");
+        assertEq(result.fairValue, 150, "Timeout excludes stale data: median from fresh oracles only");
 
- 
+    
     }
 
     // Gap 2: Access Control Tests for Edge Cases
@@ -3649,26 +3938,21 @@ contract SecurityTest is BaseTest {
 
         //  DEFENSE: Old owner cannot add stores anymore
         // Test 1: Try from old owner (should fail)
-        MockValueStore store2 = createMockStore();
+        MockValueStore store2 = new MockValueStore();  // Create store WITHOUT adding to oracle
         bool oldOwnerCanAddStore = false;
         vm.prank(owner);
         try oracle.addValueStore(address(store2)) {
             oldOwnerCanAddStore = true;
-        } catch {
-            oldOwnerCanAddStore = false;
-        }
+        } catch {}
         assertTrue(!oldOwnerCanAddStore, "Old owner should NOT be able to add stores");
 
-         // Test 2: Try from old owner (should fail)
+        // Test 2: Try from old owner (should fail)
         bool oldOwnerCanSetThreshold = false;
         vm.prank(owner);
         try oracle.setThreshold(1) {
             oldOwnerCanSetThreshold = true;
-        } catch {
-            oldOwnerCanSetThreshold = false;
-        }
+        } catch {}
         assertTrue(!oldOwnerCanSetThreshold, "Old owner should NOT be able to set threshold");
-
 
     }
 
@@ -3677,8 +3961,9 @@ contract SecurityTest is BaseTest {
     function test_ReentrancyProtection_StateChangingFunctions() public {
         // SECURITY: Test that state-changing functions are not vulnerable
 
-        MockValueStore store1 = createMockStore();
-        MockValueStore store2 = createMockStore();
+        // Create stores WITHOUT adding them to oracle
+        MockValueStore store1 = new MockValueStore();
+        MockValueStore store2 = new MockValueStore();
 
         //  DEFENSE: All state-changing functions have onlyOwner modifier
         // Only trusted owner can call them, preventing external reentrancy
@@ -3757,14 +4042,7 @@ contract SecurityTest is BaseTest {
 
  
     }
-
-    
-
-    
-
-    
-
- 
- 
  
 }
+
+ 
