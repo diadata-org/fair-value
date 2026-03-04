@@ -292,6 +292,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             uint256 sumDen = dens[mid1] + dens[mid2];
             denominator = (sumDen + 1) / 2;
 
+            // Use max timestamp between selected one
             medianTimestamp = timestamps[mid2];
         }
 
