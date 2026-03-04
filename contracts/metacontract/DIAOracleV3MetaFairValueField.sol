@@ -709,4 +709,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         return (uint128(m.fairValue), uint128(m.timestamp));
     }
+
+    /// @notice Get all registered ValueStore addresses
+    /// @dev Returns an array of all currently registered ValueStore addresses
+    /// @return stores Array of ValueStore addresses
+    function getValueStores() external view returns (address[] memory stores) {
+        stores = new address[](numValueStores);
+        for (uint256 i = 0; i < numValueStores; ++i) {
+            stores[i] = valueStores[i];
+        }
+    }
 }

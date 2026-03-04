@@ -1461,6 +1461,58 @@ contract AdminFunctionsTest is BaseTest {
         oracle.setTimeoutSeconds(86400);
         assertEq(oracle.timeoutSeconds(), 86400);
     }
+
+    function test_GetValueStores_Empty() public {
+        address[] memory stores = oracle.getValueStores();
+        assertEq(stores.length, 0);
+    }
+
+    function test_GetValueStores_SingleStore() public {
+        MockValueStore store = createMockStore();
+
+        address[] memory stores = oracle.getValueStores();
+        assertEq(stores.length, 1);
+        assertEq(stores[0], address(store));
+    }
+
+    function test_GetValueStores_MultipleStores() public {
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        address[] memory stores = oracle.getValueStores();
+        assertEq(stores.length, 3);
+        assertEq(stores[0], address(store1));
+        assertEq(stores[1], address(store2));
+        assertEq(stores[2], address(store3));
+    }
+
+    function test_GetValueStores_AfterRemoval() public {
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+
+        // Remove first store
+        vm.prank(owner);
+        oracle.removeValueStore(address(store1));
+
+        address[] memory stores = oracle.getValueStores();
+        assertEq(stores.length, 1);
+        assertEq(stores[0], address(store2));
+    }
+
+    function test_GetValueStores_PreservesOrder() public {
+        MockValueStore[] memory storesArray = new MockValueStore[](5);
+        for (uint256 i = 0; i < 5; ++i) {
+            storesArray[i] = createMockStore();
+        }
+
+        address[] memory retrievedStores = oracle.getValueStores();
+        assertEq(retrievedStores.length, 5);
+
+        for (uint256 i = 0; i < 5; ++i) {
+            assertEq(retrievedStores[i], address(storesArray[i]));
+        }
+    }
 }
 
  
