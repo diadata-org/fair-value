@@ -45,6 +45,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error OracleNotFound();
     error MaxValueStoresReached(uint256);
     error InvalidValueStoreInterface(address store);
+    error StackOverflow();
 
     /// @notice Emitted when timeout seconds is changed
     /// @param oldTimeoutSeconds The previous timeout value
@@ -83,7 +84,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     /// @dev Reverts if the store doesn't implement IValueStore interface
     function addValueStore(address newStore) external onlyOwner {
         if (newStore == address(0)) revert ZeroAddress();
-        if (numValueStores >= maxValueStores) revert MaxValueStoresReached(maxValueStores);
+        if (numValueStores == maxValueStores) revert MaxValueStoresReached(maxValueStores);
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == newStore) revert OracleExists();
         }
@@ -93,7 +94,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             revert InvalidValueStoreInterface(newStore);
         }
 
-        valueStores[numValueStores++] = newStore;
+        ++numValueStores;
+        valueStores[numValueStores - 1] = newStore;
         emit ValueStoreAdded(newStore, numValueStores - 1);
     }
 
@@ -103,9 +105,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     function removeValueStore(address storeAddr) external onlyOwner {
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == storeAddr) {
-                valueStores[i] = valueStores[numValueStores - 1];
-                delete valueStores[numValueStores - 1];
-                numValueStores--;
+                --numValueStores;
+                valueStores[i] = valueStores[numValueStores];
+                delete valueStores[numValueStores];
                 emit ValueStoreRemoved(storeAddr, i);
                 return;
             }
@@ -240,7 +242,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
                 nums[count] = num;
                 dens[count] = den;
                 timestamps[count] = ts;
-                count++;
+                ++count;
             } catch {
                 continue;
             }
@@ -359,10 +361,10 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory d,
         uint256 len
     ) internal pure {
-        if (len <= 1) return;
+        if (len < 2) return;
 
         // Use optimized insertion sort for small arrays (n <= 10)
-        if (len <= 10) {
+        if (len < 11) {
             _insertionSort(main, a, b, c, d, len);
         } else {
             // Use iterative QuickSort for larger arrays (n > 10)
@@ -396,7 +398,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             // Shift elements that are greater than keyMain
             while (j > 0) {
                 uint256 prev = j - 1;
-                if (main[prev] <= keyMain) break;
+                if (main[prev] < keyMain + 1) break;
 
                 main[j] = main[prev];
                 a[j] = a[prev];
@@ -433,7 +435,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 right
     ) private pure {
         // Use insertion sort for small arrays (optimization)
-        if (right - left + 1 <= 10) {
+        if (right - left < 10) {
             _insertionSortRange(main, a, b, c, d, left, right);
             return;
         }
@@ -446,17 +448,21 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 stackTop = 0;
 
         // Push initial range
-        stack[stackTop++] = left;
-        stack[stackTop++] = right;
+        stack[stackTop] = left;
+        ++stackTop;
+        stack[stackTop] = right;
+        ++stackTop;
 
         // Process ranges until stack is empty
         while (stackTop > 0) {
             // Pop range
-            right = stack[--stackTop];
-            left = stack[--stackTop];
+            --stackTop;
+            right = stack[stackTop];
+            --stackTop;
+            left = stack[stackTop];
 
             // Use insertion sort for small partitions
-            if (right - left + 1 <= 10) {
+            if (right - left < 10) {
                 _insertionSortRange(main, a, b, c, d, left, right);
                 continue;
             }
@@ -473,17 +479,21 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             // Push right partition if it has 2+ elements
             // Condition: pivotStart < right means at least 2 elements exist
             if (pivotStart < right) {
-                require(stackTop + 2 <= 128, "Stack overflow in iterative sort");
-                stack[stackTop++] = pivotStart;
-                stack[stackTop++] = right;
+                if (stackTop + 1 > 127) revert StackOverflow();
+                stack[stackTop] = pivotStart;
+                ++stackTop;
+                stack[stackTop] = right;
+                ++stackTop;
             }
 
             // Push left partition if it has 2+ elements
             // Condition: pivotEnd > left means at least 2 elements exist
             if (pivotEnd > left) {
-                require(stackTop + 2 <= 128, "Stack overflow in iterative sort");
-                stack[stackTop++] = left;
-                stack[stackTop++] = pivotEnd;
+                if (stackTop + 1 > 127) revert StackOverflow();
+                stack[stackTop] = left;
+                ++stackTop;
+                stack[stackTop] = pivotEnd;
+                ++stackTop;
             }
         }
     }
@@ -520,20 +530,20 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         // Move pivot to end temporarily
         _swap(main, a, b, c, d, mid, right);
 
-        while (i <= gt) {
+        while (i < gt + 1) {
             if (main[i] < pivot) {
                 // Element is less than pivot - swap to left section
                 _swap(main, a, b, c, d, lt, i);
-                lt++;
-                i++;
+                ++lt;
+                ++i;
             } else if (main[i] > pivot) {
                 // Element is greater than pivot - swap to right section
                 _swap(main, a, b, c, d, i, gt);
-                gt--;
+                --gt;
                 // Don't increment i - need to examine the swapped element
             } else {
                 // Element equals pivot - keep in middle
-                i++;
+                ++i;
             }
         }
 
@@ -542,7 +552,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         // Return:
         //   - end of less-than section (lt-1), but left if no elements less than pivot
         //   - start of greater-than section (gt+1), but right if no elements greater than pivot
-        uint256 lessThanEnd = (lt > left) ? lt - 1 : left;
+        uint256 lessThanEnd = (left < lt) ? lt - 1 : left;
         uint256 greaterThanStart = (gt < right) ? gt + 1 : right;
 
         return (lessThanEnd, greaterThanStart);
@@ -603,7 +613,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 left,
         uint256 right
     ) private pure {
-        for (uint256 i = left + 1; i <= right; ++i) {
+        for (uint256 i = left + 1; i < right + 1; ++i) {
             uint256 keyMain = main[i];
             uint256 keyA = a[i];
             uint256 keyB = b[i];
@@ -613,7 +623,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
             while (j > left) {
                 uint256 prev = j - 1;
-                if (main[prev] <= keyMain) break;
+                if (main[prev] < keyMain + 1) break;
 
                 main[j] = main[prev];
                 a[j] = a[prev];
@@ -649,7 +659,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             }
         }
 
-        if (colonIndex >= len) {
+        if (colonIndex == len) {
             return (bytes32(0), "");
         }
 

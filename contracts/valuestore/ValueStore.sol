@@ -24,6 +24,13 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
 
     // --- Value storage ---
 
+    /// @notice Stored value data structure
+    /// @dev Contains all value types for a single key along with update timestamp
+    /// @param fairValue The fair value of the asset
+    /// @param valueUsd The USD value of the asset
+    /// @param numerator The numerator for fractional representation
+    /// @param denominator The denominator for fractional representation
+    /// @param timestamp The block timestamp when the value was last updated
     struct StoredValue {
         uint256 fairValue;
         uint256 valueUsd;
