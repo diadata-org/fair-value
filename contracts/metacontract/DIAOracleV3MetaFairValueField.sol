@@ -80,6 +80,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Add a new ValueStore to the oracle
     /// @param newStore The address of the ValueStore to add
+    /// @dev Reverts if the store doesn't implement IValueStore interface
     function addValueStore(address newStore) external onlyOwner {
         if (newStore == address(0)) revert ZeroAddress();
         if (numValueStores >= maxValueStores) revert MaxValueStoresReached(maxValueStores);
@@ -98,6 +99,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Remove a ValueStore from the oracle
     /// @param storeAddr The address of the ValueStore to remove
+    /// @dev Reverts if the store is not found
     function removeValueStore(address storeAddr) external onlyOwner {
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == storeAddr) {
@@ -130,6 +132,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Set the minimum number of valid responses required
     /// @param newThreshold The new threshold value
+    /// @dev Reverts if newThreshold is zero
     function setThreshold(uint256 newThreshold) external onlyOwner {
         if (newThreshold == 0) revert InvalidThreshold(newThreshold);
         uint256 oldThreshold = threshold;
@@ -139,6 +142,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Set the maximum age of data considered valid
     /// @param newTimeoutSeconds The new timeout in seconds
+    /// @dev Reverts if newTimeoutSeconds is zero or exceeds _MAX_TIMEOUT_SECONDS
     function setTimeoutSeconds(uint256 newTimeoutSeconds) external onlyOwner {
         if (newTimeoutSeconds == 0) {
             revert InvalidTimeOut(newTimeoutSeconds);
@@ -153,6 +157,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Set the maximum number of value stores that can be registered
     /// @param newMaxValueStores The new maximum value stores
+    /// @dev Reverts if newMaxValueStores is zero or less than current count
     function setMaxValueStores(uint256 newMaxValueStores) external onlyOwner {
         if (newMaxValueStores == 0) revert InvalidThreshold(newMaxValueStores);
         if (newMaxValueStores < numValueStores) {
@@ -184,6 +189,12 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count);
     }
 
+    /// @notice Initialize value arrays for collecting data from stores
+    /// @return fairValues Array to store fair values
+    /// @return usdValues Array to store USD values
+    /// @return nums Array to store numerators
+    /// @return dens Array to store denominators
+    /// @return timestamps Array to store timestamps
     function _initializeValueArrays()
         private
         view
@@ -202,6 +213,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         timestamps = new uint256[](numValueStores);
     }
 
+    /// @notice Collect values from all stores, filtering out stale data and failures
+    /// @param key The key to query from stores
+    /// @param fairValues Array to fill with fair values
+    /// @param usdValues Array to fill with USD values
+    /// @param nums Array to fill with numerators
+    /// @param dens Array to fill with denominators
+    /// @param timestamps Array to fill with timestamps
+    /// @return count The number of valid responses collected
     function _collectValues(
         string memory key,
         uint256[] memory fairValues,
@@ -228,10 +247,20 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
+    /// @notice Ensure the minimum number of valid responses was collected
+    /// @param count The number of valid responses collected
+    /// @dev Reverts if count is less than threshold
     function _ensureThresholdMet(uint256 count) private view {
         if (count < threshold) revert ThresholdNotMet(count, threshold);
     }
 
+    /// @notice Sort all value arrays by fairValue using iterative quicksort
+    /// @param fairValues Array of fair values to sort by
+    /// @param usdValues Array of USD values (sorted in parallel)
+    /// @param nums Array of numerators (sorted in parallel)
+    /// @param dens Array of denominators (sorted in parallel)
+    /// @param timestamps Array of timestamps (sorted in parallel)
+    /// @param count Number of elements to sort
     function _sortValues(
         uint256[] memory fairValues,
         uint256[] memory usdValues,
@@ -254,6 +283,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
+    /// @notice Calculate the median of sorted value arrays
+    /// @param fairValues Sorted array of fair values
+    /// @param usdValues Sorted array of USD values
+    /// @param nums Sorted array of numerators
+    /// @param dens Sorted array of denominators
+    /// @param timestamps Sorted array of timestamps
+    /// @param count Number of elements to consider
+    /// @return median MedianSet containing median values and timestamp
     function _calculateMedian(
         uint256[] memory fairValues,
         uint256[] memory usdValues,
@@ -306,8 +343,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             });
     }
 
-    // Sorts main[] ascending and reorders a[], b[], c[], d[] in the same way.
-    // Uses hybrid approach: optimized insertion sort for n <= 10, iterative QuickSort for n > 10
+    /// @notice Sort main array ascending and reorder auxiliary arrays in parallel
+    /// @dev Uses hybrid approach: insertion sort for n <= 10, iterative QuickSort for n > 10
+    /// @param main Primary array to sort by (ascending order)
+    /// @param a Auxiliary array 1 (reordered in parallel)
+    /// @param b Auxiliary array 2 (reordered in parallel)
+    /// @param c Auxiliary array 3 (reordered in parallel)
+    /// @param d Auxiliary array 4 (reordered in parallel)
+    /// @param len Number of elements to sort
     function _sortMultipleByReferenceWithTimestamps(
         uint256[] memory main,
         uint256[] memory a,
@@ -327,7 +370,13 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
-    // Optimized insertion sort for small arrays (n <= 10)
+    /// @notice Optimized insertion sort for small arrays (n <= 10)
+    /// @param main Primary array to sort
+    /// @param a Auxiliary array 1 (reordered in parallel)
+    /// @param b Auxiliary array 2 (reordered in parallel)
+    /// @param c Auxiliary array 3 (reordered in parallel)
+    /// @param d Auxiliary array 4 (reordered in parallel)
+    /// @param len Number of elements to sort
     function _insertionSort(
         uint256[] memory main,
         uint256[] memory a,
@@ -365,9 +414,15 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
-    // Iterative QuickSort implementation - eliminates recursion depth risk
-    // Uses explicit stack instead of recursive calls
-    // This prevents EVM stack overflow even with 1000+ oracles
+    /// @notice Iterative QuickSort implementation - eliminates recursion depth risk
+    /// @dev Uses explicit stack instead of recursive calls to prevent EVM stack overflow
+    /// @param main Primary array to sort
+    /// @param a Auxiliary array 1 (reordered in parallel)
+    /// @param b Auxiliary array 2 (reordered in parallel)
+    /// @param c Auxiliary array 3 (reordered in parallel)
+    /// @param d Auxiliary array 4 (reordered in parallel)
+    /// @param left Left boundary of range to sort
+    /// @param right Right boundary of range to sort
     function _quickSortIterative(
         uint256[] memory main,
         uint256[] memory a,
@@ -433,49 +488,17 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
-    // DEPRECATED: Recursive QuickSort - kept for reference but not used
-    // Use _quickSortIterative instead to avoid EVM stack overflow
-    function _quickSort(
-        uint256[] memory main,
-        uint256[] memory a,
-        uint256[] memory b,
-        uint256[] memory c,
-        uint256[] memory d,
-        uint256 left,
-        uint256 right
-    ) private pure {
-        if (left < right) {
-            // Use insertion sort for small partitions (optimization)
-            if (right - left + 1 <= 10) {
-                _insertionSortRange(main, a, b, c, d, left, right);
-                return;
-            }
-
-            // Three-way partition: returns (pivotEnd, pivotStart)
-            // Elements in [left, pivotEnd] < pivot
-            // Elements in [pivotEnd+1, pivotStart-1] = pivot
-            // Elements in [pivotStart, right] > pivot
-            (uint256 pivotEnd, uint256 pivotStart) = _partition3Way(main, a, b, c, d, left, right);
-
-            // Recursively sort only the partitions that need it
-            // Skip the middle partition (elements equal to pivot)
-            // Check if there are elements to sort in left partition
-            if (pivotEnd >= left && pivotEnd > left) {
-                _quickSort(main, a, b, c, d, left, pivotEnd);
-            }
-            // Check if there are elements to sort in right partition
-            if (pivotStart <= right && pivotStart < right) {
-                _quickSort(main, a, b, c, d, pivotStart, right);
-            }
-        }
-    }
-
-    // Three-way partition function (Dutch National Flag algorithm)
-    // Efficiently handles duplicate values by partitioning into three sections:
-    // - Less than pivot
-    // - Equal to pivot
-    // - Greater than pivot
-    // Returns (end of less-than section, start of greater-than section)
+    /// @notice Three-way partition (Dutch National Flag algorithm)
+    /// @dev Efficiently handles duplicate values by partitioning into <, =, > sections
+    /// @param main Primary array to partition
+    /// @param a Auxiliary array 1 (reordered in parallel)
+    /// @param b Auxiliary array 2 (reordered in parallel)
+    /// @param c Auxiliary array 3 (reordered in parallel)
+    /// @param d Auxiliary array 4 (reordered in parallel)
+    /// @param left Left boundary of range to partition
+    /// @param right Right boundary of range to partition
+    /// @return lessThanEnd End index of less-than section
+    /// @return greaterThanStart Start index of greater-than section
     function _partition3Way(
         uint256[] memory main,
         uint256[] memory a,
@@ -525,7 +548,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         return (lessThanEnd, greaterThanStart);
     }
 
-    // Swap elements at indices i and j across all arrays
+    /// @notice Swap elements at indices i and j across all arrays
+    /// @param main Primary array
+    /// @param a Auxiliary array 1
+    /// @param b Auxiliary array 2
+    /// @param c Auxiliary array 3
+    /// @param d Auxiliary array 4
+    /// @param i First index to swap
+    /// @param j Second index to swap
     function _swap(
         uint256[] memory main,
         uint256[] memory a,
@@ -556,7 +586,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         d[j] = tempD;
     }
 
-    // Insertion sort for a range (used by QuickSort for small partitions)
+    /// @notice Insertion sort for a range (used by QuickSort for small partitions)
+    /// @param main Primary array to sort
+    /// @param a Auxiliary array 1 (reordered in parallel)
+    /// @param b Auxiliary array 2 (reordered in parallel)
+    /// @param c Auxiliary array 3 (reordered in parallel)
+    /// @param d Auxiliary array 4 (reordered in parallel)
+    /// @param left Left boundary of range to sort
+    /// @param right Right boundary of range to sort
     function _insertionSortRange(
         uint256[] memory main,
         uint256[] memory a,
@@ -594,6 +631,11 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         }
     }
 
+    /// @notice Parse key into action hash and asset key
+    /// @dev Expected format: "action:asset" (e.g., "fairValue:BTC/USD")
+    /// @param key The key to parse
+    /// @return actionHash Keccak256 hash of the action (fairValue/usdValue/numerator/denominator)
+    /// @return assetKey The asset portion of the key (after the colon)
     function _parseKey(string memory key) internal pure returns (bytes32 actionHash, string memory assetKey) {
         bytes memory keyBytes = bytes(key);
         uint256 len = keyBytes.length;

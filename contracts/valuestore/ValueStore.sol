@@ -103,6 +103,7 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @param valueUsd The USD value to store
     /// @param numerator The numerator to store
     /// @param denominator The denominator to store
+    /// @dev Emits ValueUpdated event with current timestamp
     function setValue(
         string calldata key,
         uint256 fairValue,
@@ -134,6 +135,7 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @param valueUsds Array of USD values to store
     /// @param numerators Array of numerators to store
     /// @param denominators Array of denominators to store
+    /// @dev All arrays must have the same length. Emits ValueUpdated event for each key.
     function setMultipleValues(
         string[] calldata keys,
         uint256[] calldata fairValues,
