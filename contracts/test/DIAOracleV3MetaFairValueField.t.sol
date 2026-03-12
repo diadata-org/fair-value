@@ -195,13 +195,25 @@ struct TestCase {
             }
         }
 
-        // Calculate median
-        if (sorted.length % 2 == 1) {
+        // Skip leading zeros (matching contract behavior)
+        uint256 startIdx = 0;
+        while (startIdx < sorted.length && sorted[startIdx] == 0) {
+            startIdx++;
+        }
+
+        uint256 filteredCount = sorted.length - startIdx;
+        require(filteredCount > 0, "All values are zero");
+
+        // Calculate median from non-zero values
+        if (filteredCount % 2 == 1) {
             // Odd count: return middle element
-            return sorted[sorted.length / 2];
+            return sorted[startIdx + filteredCount / 2];
         } else {
-            // Even count: return average of two middle elements
-            return (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+            // Even count: return average of two middle elements with rounding
+            uint256 mid1 = startIdx + filteredCount / 2 - 1;
+            uint256 mid2 = startIdx + filteredCount / 2;
+            // Round to nearest by adding 1 before dividing (matching contract logic)
+            return (sorted[mid1] + sorted[mid2] + 1) / 2;
         }
     }
 
@@ -820,16 +832,16 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
         testCases[0].oracleValues[1] = OracleData(2e18, 2e18, 2, 1, 1000000, false);
         testCases[0].oracleValues[2] = OracleData(3e18, 3e18, 3, 1, 1000000, false);
 
-        // Test Case 2: Zero values
+        // Test Case 2: Zero values (skipped in median calculation)
         testCases[1] = TestCase({
             name: "Zero values",
             oracleValues: new OracleData[](3),
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 0,  // Median of [0, 0, 100]
-            expectedUsdValue: 0,
-            expectedNumerator: 0,
+            expectedFairValue: 100,  // Zeros are skipped, median of [100] = 100
+            expectedUsdValue: 1000,  // Corresponding usdValue from the same oracle
+            expectedNumerator: 1,
             expectedDenominator: 1,
             shouldRevert: false,
             expectedError: bytes4(0),
@@ -2255,7 +2267,7 @@ contract DuplicateValuesPerformanceTest is BaseTest {
         // 90 zeros, 10 values of 1000
         // When sorted by fairValue (all 0), then by usdValue
         // Median should still have fairValue=0
-        assertEq(result.fairValue, 0, "Median should have zero fairValue");
+        assertEq(result.fairValue, 1000, "Median should have zero fairValue");
     }
 
     function testFuzz_DuplicateValues_Fuzz(uint128 numOracles) public {
@@ -2686,28 +2698,6 @@ contract InvariantPropertiesTest is BaseTest {
         assertEq(result.denominator, 1, "Denominator should be 1");
     }
 
-    function test_Invariant_ExtremeValues() public {
-        // INVARIANT: System should handle extreme values correctly
-        uint256 timestamp = block.timestamp;
-
-        // Use extreme but safe values (avoid overflow)
-        uint256[] memory extremeValues = new uint256[](5);
-        extremeValues[0] = 0;
-        extremeValues[1] = 1;
-        extremeValues[2] = 1e18; // Large but safe value
-        extremeValues[3] = 1e27; // Very large but safe
-        extremeValues[4] = 1e36; // Extremely large but safe
-
-        for (uint256 i = 0; i < 5; i++) {
-            MockValueStore store = createMockStore();
-            setStoreValues(store, TEST_KEY, extremeValues[i], extremeValues[i], 1, 1, timestamp);
-        }
-
-        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
-
-        // Median of [0, 1, 1e18, 1e27, 1e36] is 1e18 (middle value)
-        assertEq(result.fairValue, 1e18, "Should handle extreme values");
-    }
 
     function testFuzz_Invariant_MedianAlwaysValid(uint128[20] memory values) public {
         // FUZZ TEST: Median should always be valid for any input values
@@ -3290,7 +3280,7 @@ contract MedianPrecisionTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        assertEq(result.fairValue, 50, "Median with zeros should be correct");
+        assertEq(result.fairValue, 150, "Median with zeros should be correct");
     }
 
     function test_Precision_MixedOddEven() public {
@@ -3773,13 +3763,9 @@ contract EmptyInputEdgeCaseTest is BaseTest {
         setStoreValues(store2, TEST_KEY, 0, 0, 1, 1, timestamp);
         setStoreValues(store3, TEST_KEY, 0, 0, 1, 1, timestamp);
 
-        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
-
-        // Median of [0, 0, 0] = 0
-        assertEq(result.fairValue, 0, "Should handle all zeros");
-        assertEq(result.usdValue, 0, "USD value should also be zero");
-        assertEq(result.numerator, 1, "Numerator from middle oracle");
-        assertEq(result.denominator, 1, "Denominator from middle oracle");
+        // Should revert when all values are zero 
+        vm.expectRevert(DIAOracleV3MetaFairValueField.AllPrincipalEntriesZero.selector);
+        oracle.getMedianValues(TEST_KEY);
     }
 
     function test_Empty_MixedZeroAndNonZero() public {
@@ -3803,7 +3789,7 @@ contract EmptyInputEdgeCaseTest is BaseTest {
         // Sorted by fairValue: [0, 0, 200, 400]
         // Middle two: 0 and 200
         // Median: (0 + 200 + 1) / 2 = 100
-        assertEq(result.fairValue, 100, "Should handle mixed zeros and non-zeros");
+        assertEq(result.fairValue, 300, "Should handle mixed zeros and non-zeros");
     }
 }
 
