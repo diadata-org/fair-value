@@ -187,9 +187,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         _ensureThresholdMet(count);
 
-        _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
+        bool isFairValueSort = _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
 
-        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count);
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, isFairValueSort);
     }
 
     /// @notice Initialize value arrays for collecting data from stores
@@ -271,8 +271,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory dens,
         uint256[] memory timestamps,
         uint256 count
-    ) private pure {
-        if (count == 0) return;
+    ) private pure returns (bool isFairValueSort) {
+        if (count == 0) return true; // Default/fallback: fairValue sort
 
         uint256 fairSum = 0;
         for (uint256 i = 0; i < count; ++i) {
@@ -281,10 +281,15 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         if (fairSum != 0) {
             _sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
+            return true; // Sorted by fairValues
         } else {
             _sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
+            return false; // Sorted by usdValues
         }
     }
+
+   
+    error AllPrincipalEntriesZero();
 
     /// @notice Calculate the median of sorted value arrays
     /// @param fairValues Sorted array of fair values
@@ -300,50 +305,47 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory nums,
         uint256[] memory dens,
         uint256[] memory timestamps,
-        uint256 count
+        uint256 count,
+        bool isFairValueSort
     ) private pure returns (MedianSet memory) {
-        uint256 fairValue;
-        uint256 usdValue;
-        uint256 numerator;
-        uint256 denominator;
-        uint256 medianTimestamp;
+        uint256[] memory principalArray = isFairValueSort ? fairValues : usdValues;
+        uint256 startIdx = 0;
 
-        if (count % 2 == 1) {
-            uint256 mid = count / 2;
-            fairValue = fairValues[mid];
-            usdValue = usdValues[mid];
-            numerator = nums[mid];
-            denominator = dens[mid];
-            medianTimestamp = timestamps[mid];
-        } else {
-            uint256 mid1 = (count / 2) - 1;
-            uint256 mid2 = count / 2;
-            // Round to nearest by adding 1 before dividing: (a + b + 1) / 2
-            // This gives proper rounding: 2.5 → 3, 2.4 → 2
-            uint256 sumFair = fairValues[mid1] + fairValues[mid2];
-            fairValue = (sumFair + 1) / 2;
-
-            uint256 sumUsd = usdValues[mid1] + usdValues[mid2];
-            usdValue = (sumUsd + 1) / 2;
-
-            uint256 sumNum = nums[mid1] + nums[mid2];
-            numerator = (sumNum + 1) / 2;
-
-            uint256 sumDen = dens[mid1] + dens[mid2];
-            denominator = (sumDen + 1) / 2;
-
-            // Use max timestamp between selected one
-            medianTimestamp = timestamps[mid2];
+        // Skip leading zeros in the principalArray after sorting
+        while (startIdx < count && principalArray[startIdx] == 0) {
+            startIdx++;
         }
 
-        return
-            MedianSet({
-                fairValue: fairValue,
-                usdValue: usdValue,
-                numerator: numerator,
-                denominator: denominator,
-                timestamp: medianTimestamp
-            });
+        uint256 filteredCount = count - startIdx;
+        if (filteredCount == 0) {
+            revert AllPrincipalEntriesZero();
+        }
+
+        uint256 mid1;
+        uint256 mid2;
+        uint256 arrayMid = filteredCount / 2;
+        uint256 base = startIdx;
+
+        if (filteredCount % 2 == 1) {
+            uint256 mid = base + arrayMid;
+            return MedianSet(
+                fairValues[mid],
+                usdValues[mid],
+                nums[mid],
+                dens[mid],
+                timestamps[mid]
+            );
+        } else {
+            mid1 = base + arrayMid - 1;
+            mid2 = base + arrayMid;
+            return MedianSet(
+                (fairValues[mid1] + fairValues[mid2] + 1) / 2,
+                (usdValues[mid1] + usdValues[mid2] + 1) / 2,
+                (nums[mid1] + nums[mid2] + 1) / 2,
+                (dens[mid1] + dens[mid2] + 1) / 2,
+                timestamps[mid2] // Use second value's timestamp
+            );
+        }
     }
 
     /// @notice Sort main array ascending and reorder auxiliary arrays in parallel
