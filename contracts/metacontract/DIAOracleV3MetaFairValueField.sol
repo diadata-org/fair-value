@@ -47,6 +47,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error MaxValueStoresReached(uint256);
     error InvalidValueStoreInterface(address store);
     error StackOverflow();
+    error UnrecognizedAction();
 
     /// @notice Emitted when timeout seconds is changed
     /// @param oldTimeoutSeconds The previous timeout value
@@ -689,7 +690,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         (bytes32 actionHash, string memory assetKey) = _parseKey(key);
 
         if (actionHash == bytes32(0)) {
-            return (uint128(0), uint128(0));
+            revert UnrecognizedAction();
         }
 
         MedianSet memory m = getMedianValues(assetKey);
@@ -710,7 +711,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             return (uint128(m.denominator), uint128(m.timestamp));
         }
 
-        return (uint128(m.fairValue), uint128(m.timestamp));
+        revert UnrecognizedAction();
     }
 
     /// @notice Get all registered ValueStore addresses

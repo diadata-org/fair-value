@@ -1610,12 +1610,10 @@ contract GetValueTest is BaseTest {
         assertEq(uint256(ts), block.timestamp);
     }
 
-    function test_GetValueWithInvalidKey() public view {
-        // Test with key that has no colon
-        (uint128 value, uint128 ts) = oracle.getValue("InvalidKey");
-
-        assertEq(uint256(value), 0);
-        assertEq(uint256(ts), 0);
+    function test_GetValueWithInvalidKey() public {
+        // Test with key that has no colon - should revert
+        vm.expectRevert(DIAOracleV3MetaFairValueField.UnrecognizedAction.selector);
+        oracle.getValue("InvalidKey");
     }
 
     function test_GetValueWithUnknownAction() public {
@@ -1625,11 +1623,9 @@ contract GetValueTest is BaseTest {
         setStoreValues(store1, "BTC", 100, 1000, 1, 1, block.timestamp);
         setStoreValues(store2, "BTC", 200, 2000, 2, 1, block.timestamp);
 
-        // Test getValue with unknown action - should return fairValue as default
-        (uint128 value, uint128 ts) = oracle.getValue("unknownAction:BTC");
-
-        assertEq(uint256(value), 150); // Default to fairValue (median of 100 and 200)
-        assertEq(uint256(ts), block.timestamp);
+        // Test getValue with unknown action - should revert
+        vm.expectRevert(DIAOracleV3MetaFairValueField.UnrecognizedAction.selector);
+        oracle.getValue("unknownAction:BTC");
     }
 
     function test_GetValueWithKeyStartingWithColon() public {
@@ -1641,9 +1637,9 @@ contract GetValueTest is BaseTest {
         setStoreValues(store2, "BTC", 200, 2000, 2, 1, block.timestamp);
 
         // actionHash will be keccak256("") which is not bytes32(0), but it won't match any known action
-        // So it defaults to fairValue
-        (uint128 value, uint128 ts) = oracle.getValue(":BTC");
-        assertEq(uint256(value), 150); // Median
+        // Should revert with unrecognized action
+        vm.expectRevert(DIAOracleV3MetaFairValueField.UnrecognizedAction.selector);
+        oracle.getValue(":BTC");
     }
 
     function test_GetValueWithMultipleColons() public {
