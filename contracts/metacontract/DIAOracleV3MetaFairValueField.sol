@@ -187,9 +187,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         _ensureThresholdMet(count);
 
-        _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
+        bool isFairValueSort = _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
 
-        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count);
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, isFairValueSort);
     }
 
     /// @notice Initialize value arrays for collecting data from stores
@@ -306,7 +306,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory dens,
         uint256[] memory timestamps,
         uint256 count,
-        bool isFairValueSort // NEW PARAM
+        bool isFairValueSort
     ) private pure returns (MedianSet memory) {
         uint256[] memory principalArray = isFairValueSort ? fairValues : usdValues;
         uint256 startIdx = 0;
