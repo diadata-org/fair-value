@@ -344,7 +344,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
                 (usdValues[mid1] + usdValues[mid2] + 1) / 2,
                 (nums[mid1] + nums[mid2] + 1) / 2,
                 (dens[mid1] + dens[mid2] + 1) / 2,
-                timestamps[mid2] // Use second value's timestamp
+                timestamps[mid1] > timestamps[mid2] ? timestamps[mid1] : timestamps[mid2]
             );
         }
     }
