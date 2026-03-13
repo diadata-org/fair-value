@@ -109,8 +109,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             if (valueStores[i] == storeAddr) {
                 --numValueStores;
                 valueStores[i] = valueStores[numValueStores];
-                delete valueStores[numValueStores];
                 emit ValueStoreRemoved(storeAddr, i);
+                delete valueStores[numValueStores];
                 return;
             }
         }
