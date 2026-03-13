@@ -12,8 +12,8 @@ build_info = true
 extra_output = ["storageLayout"]
 test = "test"
 remappings = [
-    "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
-    "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/"
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"
 ]
 
 

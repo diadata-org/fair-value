@@ -90,12 +90,11 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @notice Initializes the contract with owner
     /// @dev Replaces constructor for upgradeable contracts. Uses reinitializer(1)
     ///      to allow future upgrades to add new initialization logic with version 2, 3, etc.
-    ///      Initializes parent contracts in the correct order: Initializable, OwnableUpgradeable, UUPSUpgradeable.
+    ///      Initializes parent contracts in the correct order: Initializable, OwnableUpgradeable.
     /// @param initialOwner The address that will own the contract
     function initialize(address initialOwner) public reinitializer(1) {
         if (initialOwner == address(0)) revert ZeroAddress();
         __Ownable_init(initialOwner);
-        __UUPSUpgradeable_init();
     }
 
     /// @notice Authorizes upgrade to new implementation
