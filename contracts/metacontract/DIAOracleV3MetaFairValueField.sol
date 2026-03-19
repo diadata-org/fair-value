@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IValueStore} from "../interfaces/IValueStore.sol";
 
 /// @title DIAOracleV3MetaFairValueField
@@ -707,19 +708,19 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         MedianSet memory m = getMedianValues(assetKey);
 
         if (actionHash == _FAIR_VALUE) {
-            return (uint128(m.fairValue), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.fairValue), SafeCast.toUint128(m.timestamp));
         }
 
         if (actionHash == _USD_VALUE) {
-            return (uint128(m.usdValue), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.usdValue), SafeCast.toUint128(m.timestamp));
         }
 
         if (actionHash == _NUMERATOR) {
-            return (uint128(m.numerator), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.numerator), SafeCast.toUint128(m.timestamp));
         }
 
         if (actionHash == _DENOMINATOR) {
-            return (uint128(m.denominator), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.denominator), SafeCast.toUint128(m.timestamp));
         }
 
         revert UnrecognizedAction();
