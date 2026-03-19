@@ -375,30 +375,14 @@ struct TestCase {
     }
 
     function runTestCase(TestCase memory testCase) internal {
-        // Reset oracle state
-        uint256 numStores = stores.length;
-        for (uint256 i = 0; i < numStores; i++) {
-            vm.prank(owner);
-            oracle.removeValueStore(address(stores[i]));
-        }
         delete stores;
+        vm.prank(owner);
+        oracle = new DIAOracleV3MetaFairValueField(owner);
 
         // Execute test
         if (testCase.shouldRevert) {
             if (testCase.expectedError == DIAOracleV3MetaFairValueField.ThresholdNotMet.selector) {
-                // Configure oracle first
-                vm.prank(owner);
-                oracle.setThreshold(testCase.threshold);
-                vm.prank(owner);
-                oracle.setTimeoutSeconds(testCase.timeoutSeconds);
-
-                // Set block timestamp
-                if (testCase.blockTimestamp > 0) {
-                    vm.warp(testCase.blockTimestamp);
-                }
-
-                // Create stores and set values
-                for (uint256 i = 0; i < testCase.oracleValues.length; i++) {
+                 for (uint256 i = 0; i < testCase.oracleValues.length; i++) {
                     MockValueStore store = createMockStore();
                     OracleData memory data = testCase.oracleValues[i];
 
@@ -418,6 +402,16 @@ struct TestCase {
                     }
                 }
 
+                vm.prank(owner);
+                oracle.setThreshold(testCase.threshold);
+                vm.prank(owner);
+                oracle.setTimeoutSeconds(testCase.timeoutSeconds);
+
+                // Set block timestamp
+                if (testCase.blockTimestamp > 0) {
+                    vm.warp(testCase.blockTimestamp);
+                }
+
                 // Then expect revert
                 vm.expectRevert(
                     abi.encodeWithSelector(
@@ -429,16 +423,20 @@ struct TestCase {
                 oracle.getMedianValues(TEST_KEY);
             } else if (testCase.expectedError == DIAOracleV3MetaFairValueField.InvalidThreshold.selector) {
                 // Expect revert in setThreshold itself
+                // Note: This test expects InvalidThreshold when setting threshold without enough stores or to 0
                 vm.prank(owner);
                 vm.expectRevert(
                     abi.encodeWithSelector(
                         DIAOracleV3MetaFairValueField.InvalidThreshold.selector,
-                        0
+                        testCase.threshold  
                     )
                 );
                 oracle.setThreshold(testCase.threshold);
             } else if (testCase.expectedError == DIAOracleV3MetaFairValueField.InvalidTimeOut.selector) {
                 // Need to set threshold first, then expect revert in setTimeoutSeconds
+                for (uint256 i = 0; i < 3; i++) {
+                    createMockStore();
+                }
                 vm.prank(owner);
                 oracle.setThreshold(testCase.threshold > 0 ? testCase.threshold : 1);
 
@@ -452,17 +450,6 @@ struct TestCase {
                 oracle.setTimeoutSeconds(testCase.timeoutSeconds);
             }
         } else {
-            // Configure oracle
-            vm.prank(owner);
-            oracle.setThreshold(testCase.threshold);
-            vm.prank(owner);
-            oracle.setTimeoutSeconds(testCase.timeoutSeconds);
-
-            // Set block timestamp
-            if (testCase.blockTimestamp > 0) {
-                vm.warp(testCase.blockTimestamp);
-            }
-
             // Create stores and set values
             for (uint256 i = 0; i < testCase.oracleValues.length; i++) {
                 MockValueStore store = createMockStore();
@@ -482,6 +469,16 @@ struct TestCase {
                     // Mark this store to revert when getValue is called
                     setStoreRevert(store, TEST_KEY);
                 }
+            }
+
+            vm.prank(owner);
+            oracle.setThreshold(testCase.threshold);
+            vm.prank(owner);
+            oracle.setTimeoutSeconds(testCase.timeoutSeconds);
+
+            // Set block timestamp
+            if (testCase.blockTimestamp > 0) {
+                vm.warp(testCase.blockTimestamp);
             }
 
             DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
@@ -632,9 +629,9 @@ contract GetMedianValuesThresholdTest is BaseTest {
         testCases[0].oracleValues[1] = OracleData(200, 2000, 2, 1, 1000000, false);
         testCases[0].oracleValues[2] = OracleData(300, 3000, 3, 1, 1000000, false);
 
-        // Test Case 2: Threshold not met
+        // Test Case 2: Threshold not met 
         testCases[1] = TestCase({
-            name: "Threshold not met",
+            name: "Threshold not met ",
             oracleValues: new OracleData[](1),
             threshold: 2,
             timeoutSeconds: 3600,
@@ -644,8 +641,8 @@ contract GetMedianValuesThresholdTest is BaseTest {
             expectedNumerator: 0,
             expectedDenominator: 0,
             shouldRevert: true,
-            expectedError: DIAOracleV3MetaFairValueField.ThresholdNotMet.selector,
-            expectedErrorCount: 1  // Only 1 valid oracle
+            expectedError: DIAOracleV3MetaFairValueField.InvalidThreshold.selector,
+            expectedErrorCount: 0  
         });
         testCases[1].oracleValues[0] = OracleData(100, 1000, 1, 1, 1000000, false);
 
@@ -879,12 +876,10 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
                 vm.prank(owner);
                 oracle = new DIAOracleV3MetaFairValueField(owner);
                 vm.prank(owner);
-                oracle.setThreshold(testCases[i].threshold);
-                vm.prank(owner);
                 oracle.setTimeoutSeconds(testCases[i].timeoutSeconds);
                 vm.warp(testCases[i].blockTimestamp);
 
-                for (uint256 j = 0; j < 3; j++) {
+                 for (uint256 j = 0; j < 3; j++) {
                     MockValueStore store = createMockStore();
                     uint256 ethValue = 2000 + (j * 100);
                     store.setValue("ETH/USD", ethValue, ethValue * 10, j + 1, 1, 1000000);
@@ -896,6 +891,9 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
                         testCases[i].oracleValues[j].timestamp
                     );
                 }
+
+                vm.prank(owner);
+                oracle.setThreshold(testCases[i].threshold);
 
                 DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues("BTC/USD");
                 assertEq(result.fairValue, testCases[i].expectedFairValue);
@@ -941,6 +939,9 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
 contract NumeratorDenominatorTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         // Initialize threshold and timeout for these tests
         vm.prank(owner);
         oracle.setThreshold(2);
@@ -1417,6 +1418,13 @@ contract AdminFunctionsTest is BaseTest {
     }
 
     function test_SetThreshold() public {
+        // Add 5 stores so threshold can be set to 5
+        for (uint256 i = 0; i < 5; i++) {
+            MockValueStore store = new MockValueStore();
+            vm.prank(owner);
+            oracle.addValueStore(address(store));
+        }
+
         vm.prank(owner);
         oracle.setThreshold(5);
 
@@ -1424,6 +1432,13 @@ contract AdminFunctionsTest is BaseTest {
     }
 
     function test_SetThresholdEmitsEvent() public {
+        // Add 5 stores so threshold can be set to 5
+        for (uint256 i = 0; i < 5; i++) {
+            MockValueStore store = new MockValueStore();
+            vm.prank(owner);
+            oracle.addValueStore(address(store));
+        }
+
         vm.prank(owner);
         oracle.setThreshold(3);
 
@@ -1531,6 +1546,9 @@ contract AdminFunctionsTest is BaseTest {
 contract GetValueTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         // Initialize threshold and timeout for getValue tests
         vm.prank(owner);
         oracle.setThreshold(2);
@@ -1664,6 +1682,9 @@ contract GetValueTest is BaseTest {
 contract TimestampTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         vm.prank(owner);
         oracle.setThreshold(2);
         vm.prank(owner);
@@ -1819,6 +1840,9 @@ contract TimestampTest is BaseTest {
 contract QuickSortStackExhaustionTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         vm.prank(owner);
         oracle.setThreshold(2);
         vm.prank(owner);
@@ -1916,13 +1940,27 @@ contract QuickSortStackExhaustionTest is BaseTest {
         sizes[5] = 100;
 
         for (uint256 j = 0; j < sizes.length; j++) {
-            // Clear previous stores
+            // Clear previous stores,  use try catch to handle threshold validation
             uint256 numExisting = stores.length;
             for (uint256 i = 0; i < numExisting; i++) {
                 vm.prank(owner);
-                oracle.removeValueStore(address(stores[i]));
+                try oracle.removeValueStore(address(stores[i])) {
+                    // Successfully removed
+                } catch {
+                    // Failed to remove due to threshold validation
+                }
             }
             delete stores;
+
+            // If stores remain, create a fresh oracle
+            if (oracle.numValueStores() > 0) {
+                vm.prank(owner);
+                oracle = new DIAOracleV3MetaFairValueField(owner);
+                vm.prank(owner);
+                oracle.setTimeoutSeconds(3600);
+                vm.prank(owner);
+                oracle.setMaxValueStores(1000);
+            }
 
             uint256 numOracles = sizes[j];
             uint256 timestamp = block.timestamp;
@@ -1932,6 +1970,11 @@ contract QuickSortStackExhaustionTest is BaseTest {
                 MockValueStore store = createMockStore();
                 setStoreValues(store, TEST_KEY, i * 100, i * 1000, i + 1, 1, timestamp);
             }
+
+             // Use at least 2 for threshold, but cap at numOracles
+            uint256 testThreshold = numOracles >= 2 ? 2 : 1;
+            vm.prank(owner);
+            oracle.setThreshold(testThreshold);
 
             // Should work fine
             DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
@@ -1970,19 +2013,37 @@ contract QuickSortStackExhaustionTest is BaseTest {
         numOracles = uint128(bound(numOracles, 2, 500));  // Limit to reasonable range
         uint256 timestamp = block.timestamp;
 
-        // Clear previous stores
+        // Clear previous stores - use try-catch to handle threshold validation
         uint256 numExisting = stores.length;
         for (uint256 i = 0; i < numExisting; i++) {
             vm.prank(owner);
-            oracle.removeValueStore(address(stores[i]));
+            try oracle.removeValueStore(address(stores[i])) {
+                // Successfully removed
+            } catch {
+                // Failed to remove due to threshold validation
+            }
         }
         delete stores;
+
+        // If stores remain, create a fresh oracle
+        if (oracle.numValueStores() > 0) {
+            vm.prank(owner);
+            oracle = new DIAOracleV3MetaFairValueField(owner);
+            vm.prank(owner);
+            oracle.setTimeoutSeconds(3600);
+            vm.prank(owner);
+            oracle.setMaxValueStores(1000);
+        }
 
         // Create stores
         for (uint256 i = 0; i < numOracles; i++) {
             MockValueStore store = createMockStore();
             setStoreValues(store, TEST_KEY, i * 100, i * 1000, i + 1, 1, timestamp);
         }
+
+        uint256 testThreshold = numOracles >= 2 ? 2 : 1;
+        vm.prank(owner);
+        oracle.setThreshold(testThreshold);
 
         // Should not revert with stack overflow
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
@@ -1997,6 +2058,9 @@ contract QuickSortStackExhaustionTest is BaseTest {
 contract DuplicateValuesPerformanceTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         vm.prank(owner);
         oracle.setThreshold(2);
         vm.prank(owner);
@@ -2303,7 +2367,7 @@ contract DuplicateValuesPerformanceTest is BaseTest {
         // Extreme stress test: 1000 oracles all with same value
         // This would DEFINITELY cause stack overflow with recursive implementation
         // Iterative implementation should handle it easily
-        uint256 numOracles = 1000;
+        uint256 numOracles = 995;
         uint256 timestamp = block.timestamp;
 
         for (uint256 i = 0; i < numOracles; i++) {
@@ -2322,7 +2386,7 @@ contract DuplicateValuesPerformanceTest is BaseTest {
         // Compare: recursive would overflow at ~200-300 elements with duplicates
         // Iterative should handle 1000+ easily
 
-        uint256 numOracles = 1000;
+        uint256 numOracles = 995;
         uint256 timestamp = block.timestamp;
 
         // Create adversarial input: worst case for QuickSort
@@ -2432,6 +2496,9 @@ contract DuplicateValuesPerformanceTest is BaseTest {
 contract InvariantPropertiesTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         vm.prank(owner);
         oracle.setThreshold(2);
         vm.prank(owner);
@@ -2702,14 +2769,26 @@ contract InvariantPropertiesTest is BaseTest {
 
         uint256 timestamp = block.timestamp;
 
-        // Clear existing stores
+        // Clear existing stores - use try-catch to handle threshold validation
         for (uint256 i = 0; i < 20; i++) {
             if (i < stores.length) {
                 vm.prank(owner);
-                oracle.removeValueStore(address(stores[i]));
+                try oracle.removeValueStore(address(stores[i])) {
+                    // Successfully removed
+                } catch {
+                    // Failed to remove due to threshold validation, which is fine
+                    // We'll create a new oracle instead
+                }
             }
         }
         delete stores;
+
+         if (oracle.numValueStores() > 0) {
+            vm.prank(owner);
+            oracle = new DIAOracleV3MetaFairValueField(owner);
+            vm.prank(owner);
+            oracle.setTimeoutSeconds(3600);
+        }
 
         // Add stores with fuzzed values
         for (uint256 i = 0; i < 20; i++) {
@@ -2717,6 +2796,9 @@ contract InvariantPropertiesTest is BaseTest {
             uint256 fairValue = uint256(values[i]);
             setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
         }
+
+        vm.prank(owner);
+        oracle.setThreshold(20);
 
         // Get median - should never revert or produce invalid results
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
@@ -3334,6 +3416,9 @@ contract MedianPrecisionTest is BaseTest {
 contract OverflowEdgeCaseTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         vm.prank(owner);
         oracle.setThreshold(2);
         vm.prank(owner);
@@ -3571,6 +3656,9 @@ contract OverflowEdgeCaseTest is BaseTest {
 contract EmptyInputEdgeCaseTest is BaseTest {
     function setUp() public override {
         super.setUp();
+        createMockStore();
+        createMockStore();
+        createMockStore();
         vm.prank(owner);
         oracle.setThreshold(2);
         vm.prank(owner);

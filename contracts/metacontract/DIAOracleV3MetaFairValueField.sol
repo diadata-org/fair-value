@@ -103,10 +103,16 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Remove a ValueStore from the oracle
     /// @param storeAddr The address of the ValueStore to remove
-    /// @dev Reverts if the store is not found
+    /// @dev Reverts if the store is not found or if removal would cause threshold to exceed remaining stores
     function removeValueStore(address storeAddr) external onlyOwner {
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == storeAddr) {
+                uint256 newNumValueStores = numValueStores - 1;
+
+                 if (threshold > newNumValueStores) {
+                    revert InvalidThreshold(threshold);
+                }
+
                 --numValueStores;
                 valueStores[i] = valueStores[numValueStores];
                 emit ValueStoreRemoved(storeAddr, i);
@@ -136,9 +142,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Set the minimum number of valid responses required
     /// @param newThreshold The new threshold value
-    /// @dev Reverts if newThreshold is zero
+    /// @dev Reverts if newThreshold is zero or exceeds the current number of value stores
     function setThreshold(uint256 newThreshold) external onlyOwner {
         if (newThreshold == 0) revert InvalidThreshold(newThreshold);
+
+         if (newThreshold > numValueStores) {
+            revert InvalidThreshold(newThreshold);
+        }
+
         uint256 oldThreshold = threshold;
         threshold = newThreshold;
         emit ThresholdChanged(oldThreshold, newThreshold);
