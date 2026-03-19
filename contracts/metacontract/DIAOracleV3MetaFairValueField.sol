@@ -414,7 +414,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             // Shift elements that are greater than keyMain
             while (j > 0) {
                 uint256 prev = j - 1;
-                if (main[prev] < keyMain + 1) break;
+                if (main[prev] <= keyMain ) break;
 
                 main[j] = main[prev];
                 a[j] = a[prev];
