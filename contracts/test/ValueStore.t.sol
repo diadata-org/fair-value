@@ -60,7 +60,7 @@ contract ValueStoreTest is Test {
     function test_TransferOwnership() public {
         // Set some data before transfer to verify persistence
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         vm.prank(owner);
         valueStore.transferOwnership(newOwner);
@@ -72,11 +72,11 @@ contract ValueStoreTest is Test {
         vm.expectRevert(
             abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", owner)
         );
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
 
         // Verify new owner can set values
         vm.prank(newOwner);
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
 
         // Verify original data persisted through transfer
         (uint256 fv,,,,) = valueStore.getValue("BTC/USD");
@@ -112,11 +112,11 @@ contract ValueStoreTest is Test {
         vm.expectRevert(
             abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", owner)
         );
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         // New owner should have permissions
         vm.prank(newOwner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         (uint256 fv,,,,) = valueStore.getValue("BTC/USD");
         assertEq(fv, 100, "new owner should be able to set values");
@@ -125,7 +125,7 @@ contract ValueStoreTest is Test {
     function test_RenounceOwnership() public {
         // Set data before renouncing to verify persistence
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         vm.prank(owner);
         valueStore.renounceOwnership();
@@ -137,7 +137,7 @@ contract ValueStoreTest is Test {
         vm.expectRevert(
             abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", owner)
         );
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
 
         // Verify original data persists after renouncing
         (uint256 fv,,,,) = valueStore.getValue("BTC/USD");
@@ -148,7 +148,7 @@ contract ValueStoreTest is Test {
         vm.expectRevert(
             abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user)
         );
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
     }
 
     function test_InitializeCannotBeCalledTwice() public {
@@ -184,7 +184,7 @@ contract ValueStoreTest is Test {
         // Additional check: calling setValue on implementation directly should fail
         // because it's not initialized (no owner set)
         vm.expectRevert();
-        implementation.setValue("test", 1, 1, 1, 1);
+        implementation.setValue("test", 1, 1, 1, 1, block.timestamp);
     }
 
     // --- Upgrade Tests ---
@@ -198,7 +198,7 @@ contract ValueStoreTest is Test {
     function test_OwnerCanUpgrade() public {
         // Set data before upgrade to verify persistence
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         ValueStore newImpl = new ValueStore();
         address oldImpl = address(implementation);
@@ -220,7 +220,7 @@ contract ValueStoreTest is Test {
 
         // Verify contract functionality works after upgrade
         vm.prank(owner);
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
 
         (uint256 fv2,,,,) = valueStore.getValue("ETH/USD");
         assertEq(fv2, 200, "new values should work correctly after upgrade");
@@ -238,7 +238,7 @@ contract ValueStoreTest is Test {
 
     function test_DataPersistsAfterUpgrade() public {
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         ValueStore newImpl = new ValueStore();
 
@@ -274,7 +274,7 @@ contract ValueStoreTest is Test {
         ValueStore impl3 = new ValueStore();
 
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         vm.prank(owner);
         valueStore.upgradeToAndCall(address(impl2), "");
@@ -315,7 +315,7 @@ contract ValueStoreTest is Test {
         string memory key = "BTC/USD";
 
         vm.prank(owner);
-        valueStore.setValue(key, 100, 1000, 1, 1);
+        valueStore.setValue(key, 100, 1000, 1, 1, block.timestamp);
 
         (
             uint256 fairValue,
@@ -337,13 +337,13 @@ contract ValueStoreTest is Test {
         vm.expectRevert(
             abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user)
         );
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
     }
 
     function test_SetValueDivisionByZero() public {
         vm.prank(owner);
         vm.expectRevert(ValueStore.DivisionByZero.selector);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 0);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 0, block.timestamp);
     }
 
     function test_SetValueEmitsEvent() public {
@@ -352,12 +352,12 @@ contract ValueStoreTest is Test {
         vm.prank(owner);
         vm.expectEmit(true, true, true, true);
         emit ValueStore.ValueUpdated(key, 100, 1000, 1, 1, block.timestamp);
-        valueStore.setValue(key, 100, 1000, 1, 1);
+        valueStore.setValue(key, 100, 1000, 1, 1, block.timestamp);
     }
 
     function test_SetValueWithZeroNumerator() public {
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 0, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 0, 1, block.timestamp);
 
         (
             uint256 fairValue,
@@ -381,7 +381,7 @@ contract ValueStoreTest is Test {
         string memory key = "BTC/USD";
 
         vm.prank(owner);
-        valueStore.setValue(key, 100, 1000, 0, 0);
+        valueStore.setValue(key, 100, 1000, 0, 0, block.timestamp);
 
         (
             uint256 fairValue,
@@ -401,7 +401,7 @@ contract ValueStoreTest is Test {
 
     function test_SetValueWithLargeNumbers() public {
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 1e18, 1e18, 1e9, 1e9);
+        valueStore.setValue("BTC/USD", 1e18, 1e18, 1e9, 1e9, block.timestamp);
 
         (
             uint256 fairValue,
@@ -436,7 +436,8 @@ contract ValueStoreTest is Test {
             type(uint256).max,
             type(uint256).max,
             type(uint256).max,
-            type(uint256).max
+            type(uint256).max,
+            block.timestamp
         );
 
         (
@@ -455,11 +456,13 @@ contract ValueStoreTest is Test {
     function test_OverwriteExistingValue() public {
         string memory key = "BTC/USD";
 
+        vm.warp(1000);
         vm.prank(owner);
-        valueStore.setValue(key, 100, 1000, 1, 1);
+        valueStore.setValue(key, 100, 1000, 1, 1, block.timestamp);
 
+        vm.warp(2000);
         vm.prank(owner);
-        valueStore.setValue(key, 200, 2000, 2, 1);
+        valueStore.setValue(key, 200, 2000, 2, 1, block.timestamp);
 
         (
             uint256 fairValue,
@@ -473,7 +476,7 @@ contract ValueStoreTest is Test {
         assertEq(valueUsd, 2000, "valueUsd should be updated to 2000");
         assertEq(numerator, 2, "numerator should be updated to 2");
         assertEq(denominator, 1, "denominator should remain 1");
-        assertGt(timestamp, 0, "timestamp should be set");
+        assertEq(timestamp, 2000, "timestamp should be updated to 2000");
     }
 
     function test_TimestampUpdates() public {
@@ -482,7 +485,7 @@ contract ValueStoreTest is Test {
         vm.warp(1000); // Set predictable timestamp
 
         vm.prank(owner);
-        valueStore.setValue(key, 100, 1000, 1, 1);
+        valueStore.setValue(key, 100, 1000, 1, 1, block.timestamp);
 
         (,,,, uint256 timestamp1) = valueStore.getValue(key);
         assertEq(timestamp1, 1000, "first timestamp should be 1000");
@@ -490,7 +493,7 @@ contract ValueStoreTest is Test {
         vm.warp(2000); // Warp to specific time
 
         vm.prank(owner);
-        valueStore.setValue(key, 200, 2000, 2, 1);
+        valueStore.setValue(key, 200, 2000, 2, 1, block.timestamp);
 
         (,,,, uint256 timestamp2) = valueStore.getValue(key);
         assertEq(timestamp2, 2000, "second timestamp should be 2000");
@@ -502,28 +505,30 @@ contract ValueStoreTest is Test {
         vm.warp(1);
 
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         (,,,, uint256 ts) = valueStore.getValue("BTC/USD");
         assertEq(ts, 1, "timestamp should be 1");
     }
 
     function test_TimestampAtMaxUint() public {
-        vm.warp(type(uint256).max);
+ 
+        uint256 maxSafeTimestamp = type(uint256).max - 1 hours - 1;
+        vm.warp(maxSafeTimestamp);
 
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         (,,,, uint256 ts) = valueStore.getValue("BTC/USD");
-        assertEq(ts, type(uint256).max, "max uint timestamp should be stored correctly");
+        assertEq(ts, maxSafeTimestamp, "large timestamp should be stored correctly");
 
-        // Verify we can still update (timestamp would overflow if we incremented, but we just set it)
-        vm.warp(type(uint256).max - 1);
+ 
+        vm.warp(maxSafeTimestamp + 1);
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 200, 2000, 2, 1);
+        valueStore.setValue("BTC/USD", 200, 2000, 2, 1, block.timestamp);
 
         (,,,, uint256 ts2) = valueStore.getValue("BTC/USD");
-        assertEq(ts2, type(uint256).max - 1, "timestamp should update correctly");
+        assertEq(ts2, maxSafeTimestamp + 1, "timestamp should update correctly");
     }
 
     function test_StateUnchangedAfterFailedSetValue() public {
@@ -531,12 +536,12 @@ contract ValueStoreTest is Test {
 
         // Set initial value
         vm.prank(owner);
-        valueStore.setValue(key, 100, 1000, 1, 1);
+        valueStore.setValue(key, 100, 1000, 1, 1, block.timestamp);
 
         // Try to set invalid value (division by zero)
         vm.prank(owner);
         vm.expectRevert(ValueStore.DivisionByZero.selector);
-        valueStore.setValue(key, 200, 2000, 1, 0);
+        valueStore.setValue(key, 200, 2000, 1, 0, block.timestamp);
 
         // Verify original value is unchanged
         (uint256 fairValue,,,,) = valueStore.getValue(key);
@@ -549,13 +554,13 @@ contract ValueStoreTest is Test {
         string memory key3 = string(new bytes(500)); // Very long key
 
         vm.prank(owner);
-        valueStore.setValue(key1, 1, 1, 1, 1);
+        valueStore.setValue(key1, 1, 1, 1, 1, block.timestamp);
 
         vm.prank(owner);
-        valueStore.setValue(key2, 2, 2, 1, 1);
+        valueStore.setValue(key2, 2, 2, 1, 1, block.timestamp);
 
         vm.prank(owner);
-        valueStore.setValue(key3, 3, 3, 1, 1);
+        valueStore.setValue(key3, 3, 3, 1, 1, block.timestamp);
 
         (uint256 v1,,,,) = valueStore.getValue(key1);
         assertEq(v1, 1, "value with special chars should be stored");
@@ -570,7 +575,7 @@ contract ValueStoreTest is Test {
     function test_EmptyStringKey() public {
         vm.prank(owner);
         vm.expectRevert(ValueStore.InvalidKey.selector);
-        valueStore.setValue("", 100, 1000, 1, 1);
+        valueStore.setValue("", 100, 1000, 1, 1, block.timestamp);
     }
 
     // --- SetMultipleValues Tests ---
@@ -601,8 +606,13 @@ contract ValueStoreTest is Test {
         denominators[1] = 1;
         denominators[2] = 1;
 
+        uint256[] memory timestamps = new uint256[](3);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+        timestamps[2] = block.timestamp;
+
         vm.prank(owner);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Verify first value
         (uint256 fairValue1, uint256 valueUsd1, uint256 numerator1, uint256 denominator1,) =
@@ -636,10 +646,11 @@ contract ValueStoreTest is Test {
         uint256[] memory valueUsds = new uint256[](0);
         uint256[] memory numerators = new uint256[](0);
         uint256[] memory denominators = new uint256[](0);
+        uint256[] memory timestamps = new uint256[](0);
 
         vm.prank(owner);
         // Should succeed - empty batch is valid (no-op)
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Explicitly assert success
         assertTrue(true, "empty batch operation should succeed without revert");
@@ -661,11 +672,14 @@ contract ValueStoreTest is Test {
         uint256[] memory denominators = new uint256[](1);
         denominators[0] = 1;
 
+        uint256[] memory timestamps = new uint256[](1);
+        timestamps[0] = block.timestamp;
+
         vm.prank(user);
         vm.expectRevert(
             abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user)
         );
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
     }
 
     function test_SetMultipleValuesArrayLengthMismatch() public {
@@ -688,9 +702,13 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+
         vm.prank(owner);
         vm.expectRevert(ValueStore.InvalidArrayLengths.selector);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
     }
 
     function test_SetMultipleValuesEmitsEvents() public {
@@ -714,6 +732,10 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+
         vm.prank(owner);
         // Expect both events
         vm.expectEmit(true, true, true, true);
@@ -721,7 +743,7 @@ contract ValueStoreTest is Test {
         vm.expectEmit(true, true, true, true);
         emit ValueStore.ValueUpdated(keys[1], 200, 2000, 2, 1, block.timestamp);
 
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
     }
 
     function test_SetMultipleValuesWithMixedMaxValues() public {
@@ -745,8 +767,12 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+
         vm.prank(owner);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         (uint256 fv1,,,,) = valueStore.getValue("MAX1");
         assertEq(fv1, type(uint256).max, "first value should be max uint256");
@@ -779,9 +805,13 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 0;
 
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+
         vm.prank(owner);
         // Should pass because 0/0 is allowed (numerator == 0)
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Verify values
         (uint256 fairValue1,,,,) = valueStore.getValue("BTC/USD");
@@ -812,8 +842,13 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        // For duplicate keys, the second write needs a later timestamp
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp + 1; // Slightly later to pass validation
+
         vm.prank(owner);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Should have the second value (last write wins)
         (uint256 fv,,,,) = valueStore.getValue("BTC/USD");
@@ -841,9 +876,13 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(ValueStore.InvalidKeyInBatch.selector, 1));
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
     }
 
     function test_DivisionByZeroInMultipleValues() public {
@@ -872,9 +911,14 @@ contract ValueStoreTest is Test {
         denominators[1] = 0;
         denominators[2] = 1;
 
+        uint256[] memory timestamps = new uint256[](3);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+        timestamps[2] = block.timestamp;
+
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(ValueStore.DivisionByZeroInBatch.selector, 1));
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
     }
 
     function test_BatchErrorAtIndexZero() public {
@@ -898,9 +942,13 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(ValueStore.InvalidKeyInBatch.selector, 0));
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
     }
 
     function test_StateUnchangedAfterFailedBatch() public {
@@ -924,18 +972,28 @@ contract ValueStoreTest is Test {
         denominators[0] = 1;
         denominators[1] = 1;
 
+        uint256 baseTimestamp = block.timestamp;
+        uint256[] memory timestamps = new uint256[](2);
+        timestamps[0] = baseTimestamp;
+        timestamps[1] = baseTimestamp;
+
         // Set initial values
         vm.prank(owner);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Try batch with division by zero at index 1
         uint256[] memory badDenominators = new uint256[](2);
         badDenominators[0] = 1;
         badDenominators[1] = 0;
 
+        // Use increasing timestamps to pass initial validation
+        uint256[] memory badTimestamps = new uint256[](2);
+        badTimestamps[0] = baseTimestamp + 1;
+        badTimestamps[1] = baseTimestamp + 2;
+
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(ValueStore.DivisionByZeroInBatch.selector, 1));
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, badDenominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, badDenominators, badTimestamps);
 
         // Verify original values are unchanged (atomic rollback)
         (uint256 fv1,,,,) = valueStore.getValue("BTC/USD");
@@ -952,6 +1010,7 @@ contract ValueStoreTest is Test {
         uint256[] memory valueUsds = new uint256[](batchSize);
         uint256[] memory numerators = new uint256[](batchSize);
         uint256[] memory denominators = new uint256[](batchSize);
+        uint256[] memory timestamps = new uint256[](batchSize);
 
         for (uint256 i = 0; i < batchSize; i++) {
             keys[i] = vm.toString(i);
@@ -959,10 +1018,11 @@ contract ValueStoreTest is Test {
             valueUsds[i] = i * 100;
             numerators[i] = 1;
             denominators[i] = 1;
+            timestamps[i] = block.timestamp;
         }
 
         vm.prank(owner);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Spot check a few values
         (uint256 fv0,,,,) = valueStore.getValue("0");
@@ -987,7 +1047,7 @@ contract ValueStoreTest is Test {
         // Total expected: ~130,000 gas for first write
         vm.prank(owner);
         uint256 gasBefore = gasleft();
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
         uint256 gasAfter = gasleft();
 
         uint256 gasUsed = gasBefore - gasAfter;
@@ -1005,6 +1065,7 @@ contract ValueStoreTest is Test {
         uint256[] memory valueUsds = new uint256[](10);
         uint256[] memory numerators = new uint256[](10);
         uint256[] memory denominators = new uint256[](10);
+        uint256[] memory timestamps = new uint256[](10);
 
         for (uint256 i = 0; i < 10; i++) {
             keys[i] = vm.toString(i);
@@ -1012,6 +1073,7 @@ contract ValueStoreTest is Test {
             valueUsds[i] = i;
             numerators[i] = i;
             denominators[i] = i + 1;
+            timestamps[i] = block.timestamp;
         }
 
         // Gas cost breakdown for batch of 10 (all cold storage):
@@ -1021,7 +1083,7 @@ contract ValueStoreTest is Test {
         // Plus loop overhead and validation
         vm.prank(owner);
         uint256 gasBefore = gasleft();
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
         uint256 gasAfter = gasleft();
 
         uint256 gasUsed = gasBefore - gasAfter;
@@ -1040,7 +1102,7 @@ contract ValueStoreTest is Test {
         string memory key = "BTC/USD";
 
         vm.prank(owner);
-        valueStore.setValue(key, 100, 1000, 1, 1);
+        valueStore.setValue(key, 100, 1000, 1, 1, block.timestamp);
 
         (
             uint256 fairValue,
@@ -1066,10 +1128,10 @@ contract ValueStoreTest is Test {
 
     function test_MultipleKeys() public {
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         vm.prank(owner);
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
 
         (uint256 fairValue1,,,,) = valueStore.getValue("BTC/USD");
         assertEq(fairValue1, 100, "first key value should match");
@@ -1080,10 +1142,10 @@ contract ValueStoreTest is Test {
 
     function test_MultipleKeysWithSamePrefix() public {
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         vm.prank(owner);
-        valueStore.setValue("BTC/ETH", 200, 2000, 2, 1);
+        valueStore.setValue("BTC/ETH", 200, 2000, 2, 1, block.timestamp);
 
         (uint256 fairValue1,,,,) = valueStore.getValue("BTC/USD");
         assertEq(fairValue1, 100, "first prefix value should match");
@@ -1100,11 +1162,11 @@ contract ValueStoreTest is Test {
         string memory key3 = "BA";
 
         vm.prank(owner);
-        valueStore.setValue(key1, 100, 1000, 1, 1);
+        valueStore.setValue(key1, 100, 1000, 1, 1, block.timestamp);
         vm.prank(owner);
-        valueStore.setValue(key2, 200, 2000, 2, 1);
+        valueStore.setValue(key2, 200, 2000, 2, 1, block.timestamp);
         vm.prank(owner);
-        valueStore.setValue(key3, 300, 3000, 3, 1);
+        valueStore.setValue(key3, 300, 3000, 3, 1, block.timestamp);
 
         (uint256 fv1,,,,) = valueStore.getValue(key1);
         (uint256 fv2,,,,) = valueStore.getValue(key2);
@@ -1132,7 +1194,7 @@ contract ValueStoreTest is Test {
         // Owner should always be able to write, regardless of state
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(owner);
-            valueStore.setValue(vm.toString(i), i, i * 100, 1, 1);
+            valueStore.setValue(vm.toString(i), i, i * 100, 1, 1, block.timestamp);
 
             (uint256 fv,,,,) = valueStore.getValue(vm.toString(i));
             assertEq(fv, i, "owner should be able to write values");
@@ -1142,12 +1204,12 @@ contract ValueStoreTest is Test {
     function test_Invariant_NonOwnerCanNeverWrite() public {
         // Non-owner should never be able to write, even after various operations
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         // Try as non-owner before any state changes
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
 
         // Verify value didn't change
         (uint256 fv,,,,) = valueStore.getValue("BTC/USD");
@@ -1159,7 +1221,7 @@ contract ValueStoreTest is Test {
 
         vm.prank(user);
         vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user));
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, block.timestamp);
     }
 
     function test_Invariant_TimestampAlwaysMatchesBlockTimestamp() public {
@@ -1167,7 +1229,7 @@ contract ValueStoreTest is Test {
         vm.warp(12345);
 
         vm.prank(owner);
-        valueStore.setValue("KEY1", 1, 1, 1, 1);
+        valueStore.setValue("KEY1", 1, 1, 1, 1, block.timestamp);
 
         (,,,, uint256 ts1) = valueStore.getValue("KEY1");
         assertEq(ts1, 12345, "timestamp should match block timestamp");
@@ -1175,7 +1237,7 @@ contract ValueStoreTest is Test {
         vm.warp(54321);
 
         vm.prank(owner);
-        valueStore.setValue("KEY2", 2, 2, 1, 1);
+        valueStore.setValue("KEY2", 2, 2, 1, 1, block.timestamp);
 
         (,,,, uint256 ts2) = valueStore.getValue("KEY2");
         assertEq(ts2, 54321, "timestamp should match new block timestamp");
@@ -1189,7 +1251,7 @@ contract ValueStoreTest is Test {
         // - No external calls before state changes
         // - CEI (Checks-Effects-Interactions) pattern followed
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, block.timestamp);
 
         (uint256 fv,,,,) = valueStore.getValue("BTC/USD");
         assertEq(fv, 100, "value should be set correctly");
@@ -1204,6 +1266,7 @@ contract ValueStoreTest is Test {
         uint256[] memory valueUsds = new uint256[](batchSize);
         uint256[] memory numerators = new uint256[](batchSize);
         uint256[] memory denominators = new uint256[](batchSize);
+        uint256[] memory timestamps = new uint256[](batchSize);
 
         for (uint256 i = 0; i < batchSize; i++) {
             keys[i] = vm.toString(i);
@@ -1211,11 +1274,12 @@ contract ValueStoreTest is Test {
             valueUsds[i] = i * 100;
             numerators[i] = 1;
             denominators[i] = 1;
+            timestamps[i] = block.timestamp;
         }
 
         vm.prank(owner);
         // Should complete without out of gas
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Spot check values
         (uint256 fv0,,,,) = valueStore.getValue("0");
@@ -1241,7 +1305,7 @@ contract ValueStoreTest is Test {
         vm.assume(numerator == 0 || denominator > 0);
 
         vm.prank(owner);
-        valueStore.setValue(key, fairValue, valueUsd, numerator, denominator);
+        valueStore.setValue(key, fairValue, valueUsd, numerator, denominator, block.timestamp);
 
         (
             uint256 storedFv,
@@ -1266,7 +1330,7 @@ contract ValueStoreTest is Test {
     ) public {
         vm.prank(owner);
         vm.expectRevert(ValueStore.InvalidKey.selector);
-        valueStore.setValue("", fairValue, valueUsd, numerator, denominator);
+        valueStore.setValue("", fairValue, valueUsd, numerator, denominator, block.timestamp);
     }
 
     function testFuzz_SetValueRevertsOnDivisionByZero(
@@ -1280,7 +1344,7 @@ contract ValueStoreTest is Test {
 
         vm.prank(owner);
         vm.expectRevert(ValueStore.DivisionByZero.selector);
-        valueStore.setValue(key, fairValue, valueUsd, numerator, 0);
+        valueStore.setValue(key, fairValue, valueUsd, numerator, 0, block.timestamp);
     }
 
     // --- supportsInterface Tests ---
@@ -1332,10 +1396,10 @@ contract ValueStoreTest is Test {
         // 0/0 represents an "undefined" or "invalid" fraction
 
         vm.prank(owner);
-        valueStore.setValue("VALID_KEY", 100, 1000, 1, 1);
+        valueStore.setValue("VALID_KEY", 100, 1000, 1, 1, block.timestamp);
 
         vm.prank(owner);
-        valueStore.setValue("INVALID_KEY", 200, 2000, 0, 0);
+        valueStore.setValue("INVALID_KEY", 200, 2000, 0, 0, block.timestamp);
 
         // Consumer should check for 0/0 case
         (uint256 fv1,,, uint256 den1,) = valueStore.getValue("VALID_KEY");
@@ -1386,29 +1450,35 @@ contract ValueStoreTest is Test {
         denominators[1] = 1;
         denominators[2] = 1;
 
+        uint256[] memory timestamps = new uint256[](3);
+        timestamps[0] = block.timestamp;
+        timestamps[1] = block.timestamp;
+        timestamps[2] = block.timestamp;
+
         vm.prank(owner);
-        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators);
+        valueStore.setMultipleValues(keys, fairValues, valueUsds, numerators, denominators, timestamps);
 
         // Store batch results (limited variables to avoid stack too deep)
         (uint256 fv1_batch,,, uint256 den1_batch,) = valueStore.getValue("BTC/USD");
         (uint256 fv2_batch,,, uint256 den2_batch,) = valueStore.getValue("ETH/USD");
         (uint256 fv3_batch,,, uint256 den3_batch,) = valueStore.getValue("AAPL/USD");
 
-        // Clear values
+        // Clear values with increasing timestamps to pass validation
+        uint256 ts = block.timestamp;
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 0, 0, 0, 1);
+        valueStore.setValue("BTC/USD", 0, 0, 0, 1, ts + 1);
         vm.prank(owner);
-        valueStore.setValue("ETH/USD", 0, 0, 0, 1);
+        valueStore.setValue("ETH/USD", 0, 0, 0, 1, ts + 2);
         vm.prank(owner);
-        valueStore.setValue("AAPL/USD", 0, 0, 0, 1);
+        valueStore.setValue("AAPL/USD", 0, 0, 0, 1, ts + 3);
 
-        // Now set using individual calls
+        // Now set using individual calls with increasing timestamps
         vm.prank(owner);
-        valueStore.setValue("BTC/USD", 100, 1000, 1, 1);
+        valueStore.setValue("BTC/USD", 100, 1000, 1, 1, ts + 4);
         vm.prank(owner);
-        valueStore.setValue("ETH/USD", 200, 2000, 2, 1);
+        valueStore.setValue("ETH/USD", 200, 2000, 2, 1, ts + 5);
         vm.prank(owner);
-        valueStore.setValue("AAPL/USD", 300, 3000, 3, 1);
+        valueStore.setValue("AAPL/USD", 300, 3000, 3, 1, ts + 6);
 
         // Get single results and verify immediately
         {

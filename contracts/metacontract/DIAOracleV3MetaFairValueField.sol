@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {IValueStore} from "../interfaces/IValueStore.sol";
 
 /// @title DIAOracleV3MetaFairValueField
@@ -47,6 +48,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     error MaxValueStoresReached(uint256);
     error InvalidValueStoreInterface(address store);
     error StackOverflow();
+    error UnrecognizedAction();
 
     /// @notice Emitted when timeout seconds is changed
     /// @param oldTimeoutSeconds The previous timeout value
@@ -102,14 +104,20 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Remove a ValueStore from the oracle
     /// @param storeAddr The address of the ValueStore to remove
-    /// @dev Reverts if the store is not found
+    /// @dev Reverts if the store is not found or if removal would cause threshold to exceed remaining stores
     function removeValueStore(address storeAddr) external onlyOwner {
         for (uint256 i = 0; i < numValueStores; ++i) {
             if (valueStores[i] == storeAddr) {
+                uint256 newNumValueStores = numValueStores - 1;
+
+                 if (threshold > newNumValueStores) {
+                    revert InvalidThreshold(threshold);
+                }
+
                 --numValueStores;
                 valueStores[i] = valueStores[numValueStores];
-                delete valueStores[numValueStores];
                 emit ValueStoreRemoved(storeAddr, i);
+                delete valueStores[numValueStores];
                 return;
             }
         }
@@ -135,9 +143,14 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Set the minimum number of valid responses required
     /// @param newThreshold The new threshold value
-    /// @dev Reverts if newThreshold is zero
+    /// @dev Reverts if newThreshold is zero or exceeds the current number of value stores
     function setThreshold(uint256 newThreshold) external onlyOwner {
         if (newThreshold == 0) revert InvalidThreshold(newThreshold);
+
+         if (newThreshold > numValueStores) {
+            revert InvalidThreshold(newThreshold);
+        }
+
         uint256 oldThreshold = threshold;
         threshold = newThreshold;
         emit ThresholdChanged(oldThreshold, newThreshold);
@@ -187,9 +200,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         _ensureThresholdMet(count);
 
-        _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
+        bool isFairValueSort = _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
 
-        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count);
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, isFairValueSort);
     }
 
     /// @notice Initialize value arrays for collecting data from stores
@@ -271,8 +284,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory dens,
         uint256[] memory timestamps,
         uint256 count
-    ) private pure {
-        if (count == 0) return;
+    ) private pure returns (bool isFairValueSort) {
+        if (count == 0) return true; // Default/fallback: fairValue sort
 
         uint256 fairSum = 0;
         for (uint256 i = 0; i < count; ++i) {
@@ -281,10 +294,15 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         if (fairSum != 0) {
             _sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
+            return true; // Sorted by fairValues
         } else {
             _sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
+            return false; // Sorted by usdValues
         }
     }
+
+   
+    error AllPrincipalEntriesZero();
 
     /// @notice Calculate the median of sorted value arrays
     /// @param fairValues Sorted array of fair values
@@ -300,50 +318,47 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory nums,
         uint256[] memory dens,
         uint256[] memory timestamps,
-        uint256 count
+        uint256 count,
+        bool isFairValueSort
     ) private pure returns (MedianSet memory) {
-        uint256 fairValue;
-        uint256 usdValue;
-        uint256 numerator;
-        uint256 denominator;
-        uint256 medianTimestamp;
+        uint256[] memory principalArray = isFairValueSort ? fairValues : usdValues;
+        uint256 startIdx = 0;
 
-        if (count % 2 == 1) {
-            uint256 mid = count / 2;
-            fairValue = fairValues[mid];
-            usdValue = usdValues[mid];
-            numerator = nums[mid];
-            denominator = dens[mid];
-            medianTimestamp = timestamps[mid];
-        } else {
-            uint256 mid1 = (count / 2) - 1;
-            uint256 mid2 = count / 2;
-            // Round to nearest by adding 1 before dividing: (a + b + 1) / 2
-            // This gives proper rounding: 2.5 → 3, 2.4 → 2
-            uint256 sumFair = fairValues[mid1] + fairValues[mid2];
-            fairValue = (sumFair + 1) / 2;
-
-            uint256 sumUsd = usdValues[mid1] + usdValues[mid2];
-            usdValue = (sumUsd + 1) / 2;
-
-            uint256 sumNum = nums[mid1] + nums[mid2];
-            numerator = (sumNum + 1) / 2;
-
-            uint256 sumDen = dens[mid1] + dens[mid2];
-            denominator = (sumDen + 1) / 2;
-
-            // Use max timestamp between selected one
-            medianTimestamp = timestamps[mid2];
+        // Skip leading zeros in the principalArray after sorting
+        while (startIdx < count && principalArray[startIdx] == 0) {
+            startIdx++;
         }
 
-        return
-            MedianSet({
-                fairValue: fairValue,
-                usdValue: usdValue,
-                numerator: numerator,
-                denominator: denominator,
-                timestamp: medianTimestamp
-            });
+        uint256 filteredCount = count - startIdx;
+        if (filteredCount == 0) {
+            revert AllPrincipalEntriesZero();
+        }
+
+        uint256 mid1;
+        uint256 mid2;
+        uint256 arrayMid = filteredCount / 2;
+        uint256 base = startIdx;
+
+        if (filteredCount % 2 == 1) {
+            uint256 mid = base + arrayMid;
+            return MedianSet(
+                fairValues[mid],
+                usdValues[mid],
+                nums[mid],
+                dens[mid],
+                timestamps[mid]
+            );
+        } else {
+            mid1 = base + arrayMid - 1;
+            mid2 = base + arrayMid;
+            return MedianSet(
+                (fairValues[mid1] + fairValues[mid2] + 1) / 2,
+                (usdValues[mid1] + usdValues[mid2] + 1) / 2,
+                (nums[mid1] + nums[mid2] + 1) / 2,
+                (dens[mid1] + dens[mid2] + 1) / 2,
+                timestamps[mid1] > timestamps[mid2] ? timestamps[mid1] : timestamps[mid2]
+            );
+        }
     }
 
     /// @notice Sort main array ascending and reorder auxiliary arrays in parallel
@@ -399,7 +414,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             // Shift elements that are greater than keyMain
             while (j > 0) {
                 uint256 prev = j - 1;
-                if (main[prev] < keyMain + 1) break;
+                if (main[prev] <= keyMain ) break;
 
                 main[j] = main[prev];
                 a[j] = a[prev];
@@ -687,28 +702,28 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         (bytes32 actionHash, string memory assetKey) = _parseKey(key);
 
         if (actionHash == bytes32(0)) {
-            return (uint128(0), uint128(0));
+            revert UnrecognizedAction();
         }
 
         MedianSet memory m = getMedianValues(assetKey);
 
         if (actionHash == _FAIR_VALUE) {
-            return (uint128(m.fairValue), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.fairValue), SafeCast.toUint128(m.timestamp));
         }
 
         if (actionHash == _USD_VALUE) {
-            return (uint128(m.usdValue), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.usdValue), SafeCast.toUint128(m.timestamp));
         }
 
         if (actionHash == _NUMERATOR) {
-            return (uint128(m.numerator), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.numerator), SafeCast.toUint128(m.timestamp));
         }
 
         if (actionHash == _DENOMINATOR) {
-            return (uint128(m.denominator), uint128(m.timestamp));
+            return (SafeCast.toUint128(m.denominator), SafeCast.toUint128(m.timestamp));
         }
 
-        return (uint128(m.fairValue), uint128(m.timestamp));
+        revert UnrecognizedAction();
     }
 
     /// @notice Get all registered ValueStore addresses
