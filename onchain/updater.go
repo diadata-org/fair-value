@@ -38,6 +38,7 @@ func OracleUpdateExecutor(
 	conn *ethclient.Client,
 	connBackup *ethclient.Client,
 	data map[string]models.FairValueData,
+	contractAddress string,
 ) {
 
 	var keys []string
@@ -64,10 +65,10 @@ func OracleUpdateExecutor(
 
 		timestamps = append(timestamps, d.Time.Unix())
 	}
-	err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
+	err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps, contractAddress)
 	if err != nil {
 		log.Warnf("updater - Failed to update Oracle: %v. Retry with backup node.", err)
-		err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
+		err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps, contractAddress)
 		if err != nil {
 			log.Errorf("backup updater - Failed to update Oracle: %v.", err)
 			return
@@ -85,7 +86,8 @@ func updateOracleMultiValues(
 	valueUsds []*big.Int,
 	numerators []*big.Int,
 	denominators []*big.Int,
-	timestamps []int64) error {
+	timestamps []int64,
+	contractAddressStr string) error {
 
 	// Get gas price suggestion
 	gasPrice, err := client.SuggestGasPrice(context.Background())
@@ -99,6 +101,11 @@ func updateOracleMultiValues(
 	gasPrice, _ = fGas.Int(nil)
 
 	// Write values to smart contract
+	timestampsBig := make([]*big.Int, len(timestamps))
+	for i, ts := range timestamps {
+		timestampsBig[i] = big.NewInt(ts)
+	}
+
 	tx, err := contract.SetMultipleValues(
 		&bind.TransactOpts{
 			From:     auth.From,
@@ -110,8 +117,10 @@ func updateOracleMultiValues(
 		valueUsds,
 		numerators,
 		denominators,
+		timestampsBig,
 	)
 	if err != nil {
+		log.Errorf("updater - Transaction creation failed: %v", err)
 		return err
 	}
 

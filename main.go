@@ -165,7 +165,7 @@ func main() {
 		writeTicker := time.NewTicker(time.Duration(writeTickerSeconds) * time.Second)
 		for range writeTicker.C {
 			log.Info("collectedData:----------------------------------- ", collectedData)
-			onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, collectedData)
+			onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, collectedData, deployedContract)
 		}
 	}()
 
