@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {IERC165} from "@openzeppelin/contracts/interfaces/IERC165.sol";
 import {IValueStore} from "../interfaces/IValueStore.sol";
 
@@ -21,6 +21,9 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     error InvalidKey();
     error InvalidKeyInBatch(uint256 index);
     error DivisionByZeroInBatch(uint256 index);
+    error TimestampTooFarInFuture(uint256 timestamp, uint256 blockTime);
+    error TimestampTooFarInPast(uint256 timestamp, uint256 blockTime);
+    error TimestampNotIncreasing(uint256 newTimestamp, uint256 existingTimestamp);
 
     // --- Value storage ---
 
@@ -40,6 +43,9 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     }
 
     mapping(string => StoredValue) private _data;
+
+    /// @notice Maximum timestamp gap in the future/past (1 hour)
+    uint256 public constant MAX_TIMESTAMP_GAP = 1 hours;
 
     /* solhint-disable gas-indexed-events */
     /// @notice Emitted when a value is updated
@@ -90,12 +96,11 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @notice Initializes the contract with owner
     /// @dev Replaces constructor for upgradeable contracts. Uses reinitializer(1)
     ///      to allow future upgrades to add new initialization logic with version 2, 3, etc.
-    ///      Initializes parent contracts in the correct order: Initializable, OwnableUpgradeable, UUPSUpgradeable.
+    ///      Initializes parent contracts in the correct order: Initializable, OwnableUpgradeable.
     /// @param initialOwner The address that will own the contract
     function initialize(address initialOwner) public reinitializer(1) {
         if (initialOwner == address(0)) revert ZeroAddress();
         __Ownable_init(initialOwner);
-        __UUPSUpgradeable_init();
     }
 
     /// @notice Authorizes upgrade to new implementation
@@ -110,13 +115,15 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @param valueUsd The USD value to store
     /// @param numerator The numerator to store
     /// @param denominator The denominator to store
-    /// @dev Emits ValueUpdated event with current timestamp
+    /// @param timestamp The timestamp to store
+    /// @dev Emits ValueUpdated event with provided timestamp
     function setValue(
         string calldata key,
         uint256 fairValue,
         uint256 valueUsd,
         uint256 numerator,
-        uint256 denominator
+        uint256 denominator,
+        uint256 timestamp
     ) external onlyOwner {
         if (bytes(key).length == 0) {
             revert InvalidKey();
@@ -125,15 +132,17 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
             revert DivisionByZero();
         }
 
+        _validateTimestamp(key, timestamp);
+
         _data[key] = StoredValue({
             fairValue: fairValue,
             valueUsd: valueUsd,
             numerator: numerator,
             denominator: denominator,
-            timestamp: block.timestamp
+            timestamp: timestamp
         });
 
-        emit ValueUpdated(key, fairValue, valueUsd, numerator, denominator, block.timestamp);
+        emit ValueUpdated(key, fairValue, valueUsd, numerator, denominator, timestamp);
     }
 
     /// @notice Set values for multiple keys at once (only owner)
@@ -142,20 +151,23 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
     /// @param valueUsds Array of USD values to store
     /// @param numerators Array of numerators to store
     /// @param denominators Array of denominators to store
+    /// @param timestamps Array of timestamps to store
     /// @dev All arrays must have the same length. Emits ValueUpdated event for each key.
     function setMultipleValues(
         string[] calldata keys,
         uint256[] calldata fairValues,
         uint256[] calldata valueUsds,
         uint256[] calldata numerators,
-        uint256[] calldata denominators
+        uint256[] calldata denominators,
+        uint256[] calldata timestamps
     ) external onlyOwner {
         uint256 length = keys.length;
         if (
             length != fairValues.length ||
             length != valueUsds.length ||
             length != numerators.length ||
-            length != denominators.length
+            length != denominators.length ||
+            length != timestamps.length
         ) {
             revert InvalidArrayLengths();
         }
@@ -168,15 +180,17 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
                 revert DivisionByZeroInBatch(i);
             }
 
+            _validateTimestamp(keys[i], timestamps[i]);
+
             _data[keys[i]] = StoredValue({
                 fairValue: fairValues[i],
                 valueUsd: valueUsds[i],
                 numerator: numerators[i],
                 denominator: denominators[i],
-                timestamp: block.timestamp
+                timestamp: timestamps[i]
             });
 
-            emit ValueUpdated(keys[i], fairValues[i], valueUsds[i], numerators[i], denominators[i], block.timestamp);
+            emit ValueUpdated(keys[i], fairValues[i], valueUsds[i], numerators[i], denominators[i], timestamps[i]);
         }
     }
 
@@ -209,5 +223,33 @@ contract ValueStore is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1
         return
             interfaceId == type(IERC165).interfaceId ||
             interfaceId == type(IValueStore).interfaceId;
+    }
+
+    /// @notice Validates that a timestamp is within acceptable bounds.
+    /// @dev Timestamp must not be too far in the future or too far in the past.
+    ///      This prevents invalid data from polluting the oracle.
+    ///      Also ensures timestamps are monotonically increasing for each key.
+    /// @param key The asset identifier to check existing timestamp for.
+    /// @param timestamp The timestamp to validate.
+    function _validateTimestamp(string memory key, uint256 timestamp) private view {
+        uint256 currentBlockTime = block.timestamp;
+
+        // Check if timestamp is too far in the future
+        if (timestamp > currentBlockTime + MAX_TIMESTAMP_GAP) {
+            revert TimestampTooFarInFuture(timestamp, currentBlockTime);
+        }
+
+        // Check if timestamp is too far in the past
+        if (currentBlockTime > MAX_TIMESTAMP_GAP && timestamp < currentBlockTime - MAX_TIMESTAMP_GAP) {
+            revert TimestampTooFarInPast(timestamp, currentBlockTime);
+        }
+
+        // Ensure timestamp is not older than existing value for this key
+        StoredValue storage existingValue = _data[key];
+        if (existingValue.timestamp != 0) {
+            if (timestamp <= existingValue.timestamp) {
+                revert TimestampNotIncreasing(timestamp, existingValue.timestamp);
+            }
+        }
     }
 }
