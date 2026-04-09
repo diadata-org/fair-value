@@ -84,6 +84,11 @@
         "name": "denominators",
         "type": "uint256[]",
         "internalType": "uint256[]"
+      },
+      {
+        "name": "timestamps",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
       }
     ],
     "outputs": [],

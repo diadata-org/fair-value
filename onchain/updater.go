@@ -2,7 +2,6 @@ package onchain
 
 import (
 	"context"
-	"math"
 	"math/big"
 	"time"
 
@@ -12,10 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
-)
-
-const (
-	DECIMALS_ORACLE_VALUE = 8
 )
 
 var (
@@ -38,6 +33,8 @@ func OracleUpdateExecutor(
 	conn *ethclient.Client,
 	connBackup *ethclient.Client,
 	data map[string]models.FairValueData,
+	contractAddress string,
+	decimals int,
 ) {
 
 	var keys []string
@@ -57,17 +54,22 @@ func OracleUpdateExecutor(
 
 		key := d.Symbol
 		keys = append(keys, key)
-		fairValues = append(fairValues, big.NewInt(int64(d.FairValueNative*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))
-		valueUsds = append(valueUsds, big.NewInt(int64(d.PriceUSD*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))
+
+		fairValueInt := utils.ScaleFloat(d.FairValueNative, decimals)
+		fairValues = append(fairValues, fairValueInt)
+
+		valueUSDInt := utils.ScaleFloat(d.PriceUSD, decimals)
+		valueUsds = append(valueUsds, valueUSDInt)
+
 		numerators = append(numerators, d.Numerator)
 		denominators = append(denominators, d.Denominator)
 
 		timestamps = append(timestamps, d.Time.Unix())
 	}
-	err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
+	err := updateOracleMultiValues(conn, contract, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps, contractAddress)
 	if err != nil {
 		log.Warnf("updater - Failed to update Oracle: %v. Retry with backup node.", err)
-		err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps)
+		err := updateOracleMultiValues(connBackup, contractBackup, auth, keys, fairValues, valueUsds, numerators, denominators, timestamps, contractAddress)
 		if err != nil {
 			log.Errorf("backup updater - Failed to update Oracle: %v.", err)
 			return
@@ -85,7 +87,8 @@ func updateOracleMultiValues(
 	valueUsds []*big.Int,
 	numerators []*big.Int,
 	denominators []*big.Int,
-	timestamps []int64) error {
+	timestamps []int64,
+	contractAddressStr string) error {
 
 	// Get gas price suggestion
 	gasPrice, err := client.SuggestGasPrice(context.Background())
@@ -99,6 +102,11 @@ func updateOracleMultiValues(
 	gasPrice, _ = fGas.Int(nil)
 
 	// Write values to smart contract
+	timestampsBig := make([]*big.Int, len(timestamps))
+	for i, ts := range timestamps {
+		timestampsBig[i] = big.NewInt(ts)
+	}
+
 	tx, err := contract.SetMultipleValues(
 		&bind.TransactOpts{
 			From:     auth.From,
@@ -110,8 +118,10 @@ func updateOracleMultiValues(
 		valueUsds,
 		numerators,
 		denominators,
+		timestampsBig,
 	)
 	if err != nil {
+		log.Errorf("updater - Transaction creation failed: %v", err)
 		return err
 	}
 
@@ -119,6 +129,6 @@ func updateOracleMultiValues(
 	// log.Printf("Data: %x\n", tx.Data())
 	// log.Infof("updater - Nonce: %d.", tx.Nonce())
 	// log.Infof("updater - Tx To: %s.", tx.To().String())
-	log.Infof("updater - Tx Hash: 0x%x.", tx.Hash())
+	log.Infof("updater - Tx Hash: 0x%x, Contract: %s", tx.Hash(), contractAddressStr)
 	return nil
 }

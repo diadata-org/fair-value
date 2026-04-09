@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"math"
 	"math/big"
 )
 
@@ -19,4 +20,13 @@ func Min(n, m uint64) uint64 {
 		return n
 	}
 	return m
+}
+
+func ScaleFloat(f float64, decimals int) *big.Int {
+	fBig := big.NewFloat(f)
+	scaling := big.NewFloat(math.Pow10(decimals))
+	priceScaled := new(big.Float).Mul(fBig, scaling)
+	valueUSDInt := new(big.Int)
+	priceScaled.Int(valueUSDInt)
+	return valueUSDInt
 }
