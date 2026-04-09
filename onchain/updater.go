@@ -14,10 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	DECIMALS_ORACLE_VALUE = 8
-)
-
 var (
 	log *logrus.Logger
 )
@@ -39,6 +35,7 @@ func OracleUpdateExecutor(
 	connBackup *ethclient.Client,
 	data map[string]models.FairValueData,
 	contractAddress string,
+	decimals int,
 ) {
 
 	var keys []string
@@ -58,8 +55,8 @@ func OracleUpdateExecutor(
 
 		key := d.Symbol
 		keys = append(keys, key)
-		fairValues = append(fairValues, big.NewInt(int64(d.FairValueNative*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))
-		valueUsds = append(valueUsds, big.NewInt(int64(d.PriceUSD*math.Pow10(int(DECIMALS_ORACLE_VALUE)))))
+		fairValues = append(fairValues, big.NewInt(int64(d.FairValueNative*math.Pow10(int(decimals)))))
+		valueUsds = append(valueUsds, big.NewInt(int64(d.PriceUSD*math.Pow10(int(decimals)))))
 		numerators = append(numerators, d.Numerator)
 		denominators = append(denominators, d.Denominator)
 

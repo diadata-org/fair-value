@@ -20,6 +20,7 @@ import (
 var (
 	configUpdateSeconds         int
 	writeTickerSeconds          int
+	decimalsOracleValue         int
 	feedConfigs, feedConfigsNew []models.FeedConfig
 )
 
@@ -35,6 +36,12 @@ func init() {
 		log.Errorf("parse WRITE_TICKER_SECONDS: %v", err)
 		writeTickerSeconds = 300
 	}
+	decimalsOracleValue, err = strconv.Atoi(utils.Getenv("DECIMALS_ORACLE_VALUE", "18"))
+	if err != nil {
+		log.Errorf("parse DECIMALS_ORACLE_VALUE: %v", err)
+		decimalsOracleValue = 18
+	}
+	log.Infof("Using DECIMALS_ORACLE_VALUE: %d", decimalsOracleValue)
 }
 
 func main() {
@@ -165,7 +172,7 @@ func main() {
 		writeTicker := time.NewTicker(time.Duration(writeTickerSeconds) * time.Second)
 		for range writeTicker.C {
 			log.Info("collectedData:----------------------------------- ", collectedData)
-			onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, collectedData, deployedContract)
+			onchain.OracleUpdateExecutor(auth, contract, contractBackup, conn, connBackup, collectedData, deployedContract, decimalsOracleValue)
 		}
 	}()
 
