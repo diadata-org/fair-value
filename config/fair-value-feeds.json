@@ -1,6 +1,14 @@
 {
     "Feeds": [
         {
+            "Symbol": "spSEI",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0x151669B501b561a52ad95574603AD52546F46Bf4",
+            "Blockchain": "Sei",
+            "Update_Seconds": 20,
+            "Params": ["", ["0xC257361320F4514D91c05F461006CE6a0300E2d2"]]
+        },
+        {
             "Symbol": "stroom",
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
             "Address": "",
