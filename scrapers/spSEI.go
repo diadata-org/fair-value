@@ -39,7 +39,7 @@ func NewSpSEIScraper(config models.FeedConfig, metacontractData models.Metacontr
 	scraper.lpTokenAddress = common.HexToAddress(config.Address)
 	scraper.spSeiContract = common.HexToAddress(scraper.config.Params[1].([]any)[0].(string))
 
-	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SPSEI", "https://sei-public.nodies.app"))
+	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SPSEI", ""))
 	if err != nil {
 		log.Errorf("SpSEI -- make eth client for %s: %v", config.Symbol, err)
 		return nil
