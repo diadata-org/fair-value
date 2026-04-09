@@ -2,7 +2,6 @@ package onchain
 
 import (
 	"context"
-	"math"
 	"math/big"
 	"time"
 
@@ -55,8 +54,13 @@ func OracleUpdateExecutor(
 
 		key := d.Symbol
 		keys = append(keys, key)
-		fairValues = append(fairValues, big.NewInt(int64(d.FairValueNative*math.Pow10(int(decimals)))))
-		valueUsds = append(valueUsds, big.NewInt(int64(d.PriceUSD*math.Pow10(int(decimals)))))
+
+		fairValueInt := utils.ScaleFloat(d.FairValueNative, decimals)
+		fairValues = append(fairValues, fairValueInt)
+
+		valueUSDInt := utils.ScaleFloat(d.PriceUSD, decimals)
+		valueUsds = append(valueUsds, valueUSDInt)
+
 		numerators = append(numerators, d.Numerator)
 		denominators = append(denominators, d.Denominator)
 
