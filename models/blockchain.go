@@ -10,6 +10,7 @@ const (
 	BITCOIN           = "Bitcoin"
 	ETHEREUM          = "Ethereum"
 	ARBITRUM_SEPOLIA  = "Arbitrum-Sepolia"
+	SEICHAIN          = "Sei"
 	TONCHAIN          = "Tonchain"
 	UNICHAIN          = "Unichain"
 )
