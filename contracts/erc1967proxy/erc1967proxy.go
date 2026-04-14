@@ -32,11 +32,33 @@ var (
 // ERC1967ProxyMetaData contains all meta data concerning the ERC1967Proxy contract.
 var ERC1967ProxyMetaData = &bind.MetaData{
 	ABI: "[{\"type\":\"constructor\",\"inputs\":[{\"name\":\"implementation\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"_data\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"stateMutability\":\"payable\"},{\"type\":\"fallback\",\"stateMutability\":\"payable\"},{\"type\":\"event\",\"name\":\"Upgraded\",\"inputs\":[{\"name\":\"implementation\",\"type\":\"address\",\"indexed\":true,\"internalType\":\"address\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"AddressEmptyCode\",\"inputs\":[{\"name\":\"target\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"ERC1967InvalidImplementation\",\"inputs\":[{\"name\":\"implementation\",\"type\":\"address\",\"internalType\":\"address\"}]},{\"type\":\"error\",\"name\":\"ERC1967NonPayable\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"FailedCall\",\"inputs\":[]}]",
+	Bin: "0x608060405261028c8038038061001481610158565b9283398101604082820312610140578151916001600160a01b03831690818403610140576020810151906001600160401b038211610140570182601f82011215610140578051906001600160401b0382116101445761007c601f8301601f1916602001610158565b938285526020838301011161014057815f9260208093018387015e84010152823b1561012e577f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc80546001600160a01b031916821790557fbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b5f80a2805115610117576101079161017d565b505b6040516082908161020a8239f35b505034156101095763b398979f60e01b5f5260045ffd5b634c9c8ce360e01b5f5260045260245ffd5b5f80fd5b634e487b7160e01b5f52604160045260245ffd5b6040519190601f01601f191682016001600160401b0381118382101761014457604052565b905f8091602081519101845af480806101f6575b156101b15750506040513d81523d5f602083013e60203d82010160405290565b156101d657639996b31560e01b5f9081526001600160a01b0391909116600452602490fd5b3d156101e7576040513d5f823e3d90fd5b63d6bda27560e01b5f5260045ffd5b503d1515806101915750813b151561019156fe60806040527f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc545f9081906001600160a01b0316368280378136915af43d5f803e156048573d5ff35b3d5ffdfea264697066735822122014e90b4a0575eac550ea455374a3550d1857b2a03810b58b0a1ba6c7cc0039cb64736f6c63430008220033",
 }
 
 // ERC1967ProxyABI is the input ABI used to generate the binding from.
 // Deprecated: Use ERC1967ProxyMetaData.ABI instead.
 var ERC1967ProxyABI = ERC1967ProxyMetaData.ABI
+
+// ERC1967ProxyBin is the compiled bytecode used for deploying new contracts.
+// Deprecated: Use ERC1967ProxyMetaData.Bin instead.
+var ERC1967ProxyBin = ERC1967ProxyMetaData.Bin
+
+// DeployERC1967Proxy deploys a new Ethereum contract, binding an instance of ERC1967Proxy to it.
+func DeployERC1967Proxy(auth *bind.TransactOpts, backend bind.ContractBackend, implementation common.Address, _data []byte) (common.Address, *types.Transaction, *ERC1967Proxy, error) {
+	parsed, err := ERC1967ProxyMetaData.GetAbi()
+	if err != nil {
+		return common.Address{}, nil, nil, err
+	}
+	if parsed == nil {
+		return common.Address{}, nil, nil, errors.New("GetABI returned nil")
+	}
+
+	address, tx, contract, err := bind.DeployContract(auth, *parsed, common.FromHex(ERC1967ProxyBin), backend, implementation, _data)
+	if err != nil {
+		return common.Address{}, nil, nil, err
+	}
+	return address, tx, &ERC1967Proxy{ERC1967ProxyCaller: ERC1967ProxyCaller{contract: contract}, ERC1967ProxyTransactor: ERC1967ProxyTransactor{contract: contract}, ERC1967ProxyFilterer: ERC1967ProxyFilterer{contract: contract}}, nil
+}
 
 // ERC1967Proxy is an auto generated Go binding around an Ethereum contract.
 type ERC1967Proxy struct {
