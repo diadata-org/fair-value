@@ -49,7 +49,7 @@ func DeployOrBindContract(
 		log.Info("Waiting for implementation deployment to be mined...")
 		time.Sleep(30 * time.Second)
 
-		proxyBytecodeHex, err := os.ReadFile("/tmp/ERC1967Proxy.bin")
+		proxyBytecodeHex, err := os.ReadFile("contracts/erc1967proxy/ERC1967Proxy.bin")
 		if err != nil {
 			log.Fatalf("could not read proxy bytecode: %v", err)
 			return err
