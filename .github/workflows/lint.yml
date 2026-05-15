@@ -2,6 +2,9 @@ name: Lint
 
 on: false
 
+permissions:
+  contents: read
+
 jobs:
   prettier:
     name: Prettier Code Formatting Check
