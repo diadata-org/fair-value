@@ -21,32 +21,6 @@ jobs:
           RELEASE_TAG=${GITHUB_REF#refs/tags/}
           echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
 
-      # Install IBM Cloud CLI and Container Registry CLI
-      - name: Install IBM Cloud CLI
-        run: |
-          curl -fsSL https://clis.cloud.ibm.com/install/linux | sh
-          ibmcloud plugin install container-registry -f
-
-      # Log in to IBM Cloud
-      - name: Log in to IBM Cloud
-        env:
-          IBM_CLOUD_API_KEY: ${{ secrets.IBM_CLOUD_API_KEY }}
-        run: |
-          ibmcloud login --apikey $IBM_CLOUD_API_KEY --no-region
-          ibmcloud target -r us-south
-          ibmcloud target -g Default
-
-      # Build and Tag Docker image for IBM Cloud Registry
-      - name: Build and Tag Docker image
-        run: |
-          docker build -f build/Dockerfile-fairValueFeeder -t us.icr.io/dia-registry/oracles/fair-value:${{ env.RELEASE_TAG }} .
-
-      # Push Docker image to IBM Cloud Registry
-      - name: Push Docker image to IBM Cloud Registry
-        run: |
-          ibmcloud cr login
-          docker push us.icr.io/dia-registry/oracles/fair-value:${{ env.RELEASE_TAG }}
-
       # Configure AWS credentials and push to ECR
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
@@ -59,12 +33,12 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419 # v2
 
-      - name: Tag and push image to AWS ECR
+      - name: Build and push image to AWS ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker tag us.icr.io/dia-registry/oracles/fair-value:${{ env.RELEASE_TAG }} \
-            ${ECR_REGISTRY}/lumina/fair-value:${{ env.RELEASE_TAG }}
+          docker build -f build/Dockerfile-fairValueFeeder \
+            -t ${ECR_REGISTRY}/lumina/fair-value:${{ env.RELEASE_TAG }} .
           docker push ${ECR_REGISTRY}/lumina/fair-value:${{ env.RELEASE_TAG }}
 
           echo "Pushed image to AWS ECR:"
@@ -147,4 +121,3 @@ jobs:
         run: |
           rm -rf lumina-infra
           docker logout
-          ibmcloud logout
