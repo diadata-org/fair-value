@@ -84,6 +84,14 @@ func NewIContractExchangeRate(config models.FeedConfig, metacontractData models.
 
 	switch symbol {
 
+	case "sVUSD":
+		cer := NewSVUSDScraper(config, metacontractData)
+		return cer
+
+	case "VUSD":
+		cer := NewVUSDScraper(config, metacontractData)
+		return cer
+
 	case "spSEI":
 		cer := NewSpSEIScraper(config, metacontractData)
 		return cer
