@@ -16,7 +16,7 @@ type stroomScraper struct {
 	chunkSize    uint64
 }
 
-func NewStroomScraper(config models.FeedConfig, metacontractData models.MetacontractData) *stroomScraper {
+func NewStroomScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*stroomScraper, error) {
 
 	scraper := stroomScraper{
 		BaseScraper:  NewBaseScraper(metacontractData),
@@ -26,7 +26,7 @@ func NewStroomScraper(config models.FeedConfig, metacontractData models.Metacont
 		chunkSize:    uint64(10000),
 	}
 
-	return &scraper
+	return &scraper, nil
 
 }
 

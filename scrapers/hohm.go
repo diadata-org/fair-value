@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 
@@ -26,17 +27,15 @@ type HohmScraper struct {
 	config          models.FeedConfig
 }
 
-func NewHohmScraper(config models.FeedConfig, metacontractData models.MetacontractData) *HohmScraper {
+func NewHohmScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*HohmScraper, error) {
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_HOHM", ""))
 	if err != nil {
-		log.Errorf("hOHM -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("hOHM -- make eth client for %s: %v", config.Symbol, err)
 	}
 	hohmCaller, err := hohm.NewHohmCaller(common.HexToAddress(config.Address), client)
 	if err != nil {
-		log.Errorf("hOHM -- NewHohmCaller: %v", err)
-		return nil
+		return nil, fmt.Errorf("hOHM -- NewHohmCaller: %v", err)
 	}
 
 	scraper := HohmScraper{
@@ -48,7 +47,7 @@ func NewHohmScraper(config models.FeedConfig, metacontractData models.Metacontra
 		config:          config,
 	}
 
-	return &scraper
+	return &scraper, nil
 }
 
 func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err error) {

@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/diadata-org/fair-value/models"
@@ -31,7 +32,7 @@ type USDPScraper struct {
 	config          models.FeedConfig
 }
 
-func NewUSDPScraperScraper(config models.FeedConfig, metacontractData models.MetacontractData) *USDPScraper {
+func NewUSDPScraperScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*USDPScraper, error) {
 	scraper := USDPScraper{
 		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
@@ -40,11 +41,10 @@ func NewUSDPScraperScraper(config models.FeedConfig, metacontractData models.Met
 	}
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_USDP", ""))
 	if err != nil {
-		log.Errorf("USDp -- get ETH client for %s: %v", scraper.config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("USDp -- get ETH client for %s: %v", scraper.config.Symbol, err)
 	}
 	scraper.client = client
-	return &scraper
+	return &scraper, nil
 }
 
 func (scraper *USDPScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUnderlying *big.Int, err error) {

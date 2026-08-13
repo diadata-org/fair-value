@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/diadata-org/fair-value/models"
@@ -15,25 +16,31 @@ import (
 
 type SVUSDScraper struct {
 	BaseScraper
-	client     *ethclient.Client
-	config     models.FeedConfig
-	blockchain string
+	client         *ethclient.Client
+	config         models.FeedConfig
+	blockchain     string
+	metacontractFV models.MetacontractData
 }
 
-func NewSVUSDScraper(config models.FeedConfig, metacontractData models.MetacontractData) *SVUSDScraper {
+func NewSVUSDScraper(
+	config models.FeedConfig,
+	metacontractData models.MetacontractData,
+	metacontractFV models.MetacontractData,
+) (*SVUSDScraper, error) {
 
-	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_VUSD", ""))
+	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SVUSD", ""))
 	if err != nil {
-		log.Errorf("sVUSD -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("sVUSD -- make eth client for %s: %v", config.Symbol, err)
 	}
 
-	return &SVUSDScraper{
-		BaseScraper: NewBaseScraper(metacontractData),
-		client:      client,
-		config:      config,
-		blockchain:  config.Blockchain,
+	scraper := SVUSDScraper{
+		BaseScraper:    NewBaseScraper(metacontractData),
+		client:         client,
+		config:         config,
+		blockchain:     config.Blockchain,
+		metacontractFV: metacontractFV,
 	}
+	return &scraper, nil
 }
 
 func (s *SVUSDScraper) TotalShares() (*big.Int, error) {
@@ -52,26 +59,25 @@ func (s *SVUSDScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUn
 		return
 	}
 
-	underlying, err := r.TotalAssets(&bind.CallOpts{})
+	totalUnderlying, err = r.TotalAssets(&bind.CallOpts{})
 	if err != nil {
 		return
 	}
-
-	cooldownAssets, err := r.TotalAssetsInCooldown(&bind.CallOpts{})
-	if err != nil {
-		return
-	}
-	totalUnderlying = big.NewInt(0).Sub(underlying, cooldownAssets)
 
 	// Compute USD Value of totalUnderlying using underlying asset from contract (VUSD)
 	underlyingAsset, err := s.GetUnderlyingAsset(r)
 	if err != nil {
 		return
 	}
-	quoteUnderlying, err := underlyingAsset.GetPrice(s.metacontractData.Address, s.metacontractData.Precision, s.metacontractData.Client)
+	// First try to fetch price from fair-value metacontract.
+	quoteUnderlying, err := underlyingAsset.GetPrice(s.metacontractFV.Address, s.metacontractFV.Precision, s.metacontractFV.Client)
 	if err != nil {
-		return
+		quoteUnderlying, err = underlyingAsset.GetPrice(s.metacontractData.Address, s.metacontractData.Precision, s.metacontractData.Client)
+		if err != nil {
+			return
+		}
 	}
+
 	totalValueUnderlying = utils.MulFloatAndIntToInt(quoteUnderlying.Price, totalUnderlying)
 
 	return

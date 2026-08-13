@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"fmt"
 	"math/big"
 
 	hemibtc "github.com/diadata-org/fair-value/contracts/hemibtc"
@@ -22,7 +23,7 @@ type hemiBTCScraper struct {
 	chunkSize       uint64
 }
 
-func NewhemiBTCScraper(config models.FeedConfig, metacontractData models.MetacontractData) *hemiBTCScraper {
+func NewhemiBTCScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*hemiBTCScraper, error) {
 
 	scraper := hemiBTCScraper{
 		BaseScraper:     NewBaseScraper(metacontractData),
@@ -36,12 +37,11 @@ func NewhemiBTCScraper(config models.FeedConfig, metacontractData models.Metacon
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_EVM_HEMIBTC", ""))
 	if err != nil {
-		log.Errorf("hemiBTC -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("hemiBTC -- make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 
-	return &scraper
+	return &scraper, nil
 
 }
 

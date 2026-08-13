@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/diadata-org/fair-value/models"
@@ -27,7 +28,7 @@ type SpSEIScraper struct {
 	spSeiContract   common.Address
 }
 
-func NewSpSEIScraper(config models.FeedConfig, metacontractData models.MetacontractData) *SpSEIScraper {
+func NewSpSEIScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*SpSEIScraper, error) {
 
 	scraper := SpSEIScraper{
 		BaseScraper:     NewBaseScraper(metacontractData),
@@ -41,12 +42,11 @@ func NewSpSEIScraper(config models.FeedConfig, metacontractData models.Metacontr
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SPSEI", ""))
 	if err != nil {
-		log.Errorf("SpSEI -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("SpSEI -- make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 
-	return &scraper
+	return &scraper, nil
 
 }
 

@@ -13,7 +13,6 @@ import (
 	"github.com/diadata-org/fair-value/onchain"
 	"github.com/diadata-org/fair-value/scrapers"
 	"github.com/diadata-org/fair-value/utils"
-	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,7 +47,7 @@ func main() {
 
 	// On-chain setup
 	deployedContract := utils.Getenv("DEPLOYED_CONTRACT", "")
-	chainId, err := strconv.ParseInt(utils.Getenv("CHAIN_ID", "100640"), 10, 64)
+	chainId, err := strconv.ParseInt(utils.Getenv("CHAIN_ID", ""), 10, 64)
 	if err != nil {
 		log.Fatalf("Failed to parse chainId: %v", err)
 	}
@@ -68,16 +67,24 @@ func main() {
 		log.Fatalf("Failed to Deploy or Bind primary and backup contract: %v", err)
 	}
 
-	var metacontractData models.MetacontractData
-	metacontractData.Address = common.HexToAddress(utils.Getenv("METACONTRACT_ADDRESS", ""))
-	metacontractData.Precision, err = strconv.Atoi(utils.Getenv("METACONTRACT_PRECISION", ""))
-	if err != nil {
-		log.Error("parse METACONTRACT_PRECISION: ", err)
-		metacontractData.Precision = 8
-	}
-	metacontractData.Client, err = utils.MakeEthClient(utils.Getenv("METACONTRACT_NODE", ""), utils.Getenv("METACONTRACT_NODE", ""))
+	metacontractData, err := models.MakeMetacontract(
+		utils.Getenv("METACONTRACT_ADDRESS", "0xBd82Fc0067CA5977b86c6EDB579f90DFcFb62D7d"),
+		utils.Getenv("METACONTRACT_PRECISION", "18"),
+		utils.Getenv("METACONTRACT_NODE", ""),
+		utils.Getenv("METACONTRACT_NODE", ""),
+	)
 	if err != nil {
 		log.Fatalf("MakeEthClient for metacontract connection: %v", err)
+	}
+
+	metacontractFV, err := models.MakeMetacontract(
+		utils.Getenv("METACONTRACT_FV_ADDRESS", "0x4fBe5844538e2C10151E1d10C9060c2Bb4c89DD9"),
+		utils.Getenv("METACONTRACT_FV_PRECISION", "18"),
+		utils.Getenv("METACONTRACT_FV_NODE", ""),
+		utils.Getenv("METACONTRACT_FV_NODE", ""),
+	)
+	if err != nil {
+		log.Fatalf("MakeEthClient for metacontractFV connection: %v", err)
 	}
 
 	// Start collecting and pushing metrics.
@@ -120,7 +127,12 @@ func main() {
 	allIscrapers := make(map[string]scrapers.IScraper)
 	for _, config := range feedConfigs {
 		ctx, cancel := context.WithCancel(context.Background())
-		allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config, metacontractData)
+		scraper, err := scrapers.NewIScraper(cancel, config, metacontractData, metacontractFV)
+		if err != nil {
+			log.Errorf("No scraper created for %s: %v", config.Symbol, err)
+			continue
+		}
+		allIscrapers[config.FeedConfigIdentifier()] = scraper
 		wg.Add(1)
 		go handleData(ctx, allIscrapers[config.FeedConfigIdentifier()], &wg, collectorChannel)
 	}
@@ -159,7 +171,12 @@ func main() {
 			// Add scraper for added configs.
 			for _, config := range plus {
 				ctx, cancel := context.WithCancel(context.Background())
-				allIscrapers[config.FeedConfigIdentifier()] = scrapers.NewIScraper(cancel, config, metacontractData)
+				scraper, err := scrapers.NewIScraper(cancel, config, metacontractData, metacontractFV)
+				if err != nil {
+					log.Errorf("No scraper created for %s: %v", config.Symbol, err)
+					continue
+				}
+				allIscrapers[config.FeedConfigIdentifier()] = scraper
 				wg.Add(1)
 				go handleData(ctx, allIscrapers[config.FeedConfigIdentifier()], &wg, collectorChannel)
 			}

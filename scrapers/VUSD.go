@@ -61,21 +61,21 @@ type vusdResult struct {
 	Flags               []string
 }
 
-func NewVUSDScraper(config models.FeedConfig, metacontractData models.MetacontractData) *VUSDScraper {
+func NewVUSDScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*VUSDScraper, error) {
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_VUSD", ""))
 	if err != nil {
-		log.Errorf("VUSD -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("VUSD -- make eth client for %s: %v", config.Symbol, err)
 	}
 
-	return &VUSDScraper{
+	scraper := VUSDScraper{
 		BaseScraper:  NewBaseScraper(metacontractData),
 		client:       client,
 		config:       config,
 		blockchain:   config.Blockchain,
 		treasuryAddr: common.HexToAddress(config.Address),
 	}
+	return &scraper, nil
 }
 
 func (s *VUSDScraper) TotalShares() (*big.Int, error) {
@@ -128,18 +128,20 @@ func (s *VUSDScraper) compute() (vusdResult, error) {
 		return vusdResult{}, fmt.Errorf("non-positive totalSupply")
 	}
 
-	subtractAmo := s.config.Params[1].([]any)
-	if len(s.config.Params) == 2 && len(subtractAmo) > 0 && subtractAmo[0].(string) == "true" {
-		gateway, err := vetrogateway.NewVetrogatewayCaller(gatewayAddress, s.client)
-		if err != nil {
-			return vusdResult{}, fmt.Errorf("gateway caller: %w", err)
-		}
+	if len(s.config.Params) == 2 {
+		subtractAmo, ok := s.config.Params[1].([]any)
+		if ok && len(subtractAmo) > 0 && subtractAmo[0].(string) == "true" {
+			gateway, err := vetrogateway.NewVetrogatewayCaller(gatewayAddress, s.client)
+			if err != nil {
+				return vusdResult{}, fmt.Errorf("gateway caller: %w", err)
+			}
 
-		amoSupplyRaw, err := gateway.AmoSupply(&bind.CallOpts{})
-		if err != nil {
-			return vusdResult{}, fmt.Errorf("gateway amoSupply: %w", err)
+			amoSupplyRaw, err := gateway.AmoSupply(&bind.CallOpts{})
+			if err != nil {
+				return vusdResult{}, fmt.Errorf("gateway amoSupply: %w", err)
+			}
+			totalSupplyRaw = big.NewInt(0).Sub(totalSupplyRaw, amoSupplyRaw)
 		}
-		totalSupplyRaw = big.NewInt(0).Sub(totalSupplyRaw, amoSupplyRaw)
 	}
 
 	// Get underlying tokens and their total USD value.
