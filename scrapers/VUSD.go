@@ -68,8 +68,12 @@ func NewVUSDScraper(config models.FeedConfig, metacontractData models.Metacontra
 		return nil, fmt.Errorf("VUSD -- make eth client for %s: %v", config.Symbol, err)
 	}
 
+	bs := NewBaseScraper(metacontractData)
+	cap := config.CapUSDValue
+	bs.SetCapFairValueUSD(&cap)
+
 	scraper := VUSDScraper{
-		BaseScraper:  NewBaseScraper(metacontractData),
+		BaseScraper:  bs,
 		client:       client,
 		config:       config,
 		blockchain:   config.Blockchain,
@@ -141,6 +145,9 @@ func (s *VUSDScraper) compute() (vusdResult, error) {
 				return vusdResult{}, fmt.Errorf("gateway amoSupply: %w", err)
 			}
 			totalSupplyRaw = big.NewInt(0).Sub(totalSupplyRaw, amoSupplyRaw)
+			if totalSupplyRaw.Sign() <= 0 {
+				return vusdResult{}, fmt.Errorf("non-positive backed supply after AMO subtraction")
+			}
 		}
 	}
 
