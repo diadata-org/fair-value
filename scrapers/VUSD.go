@@ -69,8 +69,10 @@ func NewVUSDScraper(config models.FeedConfig, metacontractData models.Metacontra
 	}
 
 	bs := NewBaseScraper(metacontractData)
-	cap := config.CapUSDValue
-	bs.SetCapFairValueUSD(&cap)
+	if config.CapUSDValue > 0 {
+		cap := config.CapUSDValue
+		bs.SetCapFairValueUSD(&cap)
+	}
 
 	scraper := VUSDScraper{
 		BaseScraper:  bs,
