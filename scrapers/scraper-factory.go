@@ -2,6 +2,7 @@ package scrapers
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/diadata-org/fair-value/models"
@@ -15,13 +16,21 @@ import (
 
 // NewIScraper is the factory function for the basic Scraper interface.
 // @params is a set of optional parameters such as poolID for bunnihub UniV4 pools.
-func NewIScraper(cancel context.CancelFunc, config models.FeedConfig, metacontractData models.MetacontractData) IScraper {
+func NewIScraper(
+	cancel context.CancelFunc,
+	config models.FeedConfig,
+	metacontractData models.MetacontractData,
+	metacontractFV models.MetacontractData,
+) (IScraper, error) {
 
 	switch config.FeedType {
 
 	case "CONTRACT_EXCHANGE_RATE":
 
-		scraper := NewIContractExchangeRate(config, metacontractData)
+		scraper, err := NewIContractExchangeRate(config, metacontractData, metacontractFV)
+		if err != nil {
+			return nil, err
+		}
 
 		// Processing of CER data for final value.
 		ticker := time.NewTicker(time.Duration(config.UpdateSeconds) * time.Second)
@@ -42,11 +51,14 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig, metacontra
 			}
 		}()
 
-		return scraper
+		return scraper, nil
 
 	case "NET_ASSET_VALUE":
 
-		scraper := NewINetAssetValue(config, metacontractData)
+		scraper, err := NewINetAssetValue(config, metacontractData)
+		if err != nil {
+			return nil, err
+		}
 
 		// Processing of nav.Methods to final fair value.
 		ticker := time.NewTicker(time.Duration(config.UpdateSeconds) * time.Second)
@@ -67,74 +79,75 @@ func NewIScraper(cancel context.CancelFunc, config models.FeedConfig, metacontra
 			}
 		}()
 
-		return scraper
+		return scraper, nil
 
 	}
-	return nil
+	return nil, errors.New("no scraper created")
 }
 
 // ---------------------------------------------------------------------------------
 // SPECIFIC FAIR VALUE SCRAPER FACTORIES
 // ---------------------------------------------------------------------------------
 
-func NewIContractExchangeRate(config models.FeedConfig, metacontractData models.MetacontractData) IContractExchangeRate {
+func NewIContractExchangeRate(
+	config models.FeedConfig,
+	metacontractData models.MetacontractData,
+	metacontractFV models.MetacontractData,
+) (IContractExchangeRate, error) {
 
 	symbol := config.Symbol
 	log.Infof("start %s scraper.", symbol)
 
 	switch symbol {
 
+	case "sVUSD":
+		return NewSVUSDScraper(config, metacontractData, metacontractFV)
+
+	case "VUSD":
+		return NewVUSDScraper(config, metacontractData)
+
 	case "spSEI":
-		cer := NewSpSEIScraper(config, metacontractData)
-		return cer
+		return NewSpSEIScraper(config, metacontractData)
 
 	case "pBTC":
-		cer := NewpBTCScraper(config, metacontractData)
-		return cer
+		return NewpBTCScraper(config, metacontractData)
 
 	case "hemiBTC":
-		cer := NewhemiBTCScraper(config, metacontractData)
-		return cer
+		return NewhemiBTCScraper(config, metacontractData)
 
 	case "USDp":
-		cer := NewUSDPScraperScraper(config, metacontractData)
-		return cer
+		return NewUSDPScraperScraper(config, metacontractData)
 
 	case "bmTON":
-		cer := NewBMTonScraper(config, metacontractData)
-		return cer
+		return NewBMTonScraper(config, metacontractData)
 
 	case "satUSD+":
-		cer := NewSatusdScraper(config, metacontractData)
-		return cer
+		return NewSatusdScraper(config, metacontractData)
 
 	// case "hOHM":
 	// cer := NewBunnihubScraper(config, metacontractData)
 	// return cer
 
 	case "stroom":
-		cer := NewStroomScraper(config, metacontractData)
-		return cer
+		return NewStroomScraper(config, metacontractData)
 
 	case "USDr":
-		cer := NewUSDRScraperScraper(config, metacontractData)
-		return cer
+		return NewUSDRScraperScraper(config, metacontractData)
 	}
 
-	return nil
+	return nil, errors.New("symbol not available")
 }
 
-func NewINetAssetValue(config models.FeedConfig, metacontractData models.MetacontractData) INetAssetValue {
+func NewINetAssetValue(config models.FeedConfig, metacontractData models.MetacontractData) (INetAssetValue, error) {
 	symbol := config.Symbol
 	log.Infof("start %s scraper.", symbol)
 
 	switch symbol {
 	case "hOHM":
-		nav := NewHohmScraper(config, metacontractData)
-		return nav
+		return NewHohmScraper(config, metacontractData)
 	}
 
-	return nil
+	return nil, errors.New("symbol not available")
 }
 
 func NewIReserveBacking(blockchain string, address string) IReserveBacking {

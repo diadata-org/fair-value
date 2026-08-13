@@ -25,7 +25,7 @@ type BMTonScraper struct {
 	api             *ton.APIClient
 }
 
-func NewBMTonScraper(config models.FeedConfig, metacontractData models.MetacontractData) *BMTonScraper {
+func NewBMTonScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*BMTonScraper, error) {
 	scraper := BMTonScraper{
 		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
@@ -37,12 +37,12 @@ func NewBMTonScraper(config models.FeedConfig, metacontractData models.Metacontr
 	client := liteclient.NewConnectionPool()
 	err := client.AddConnectionsFromConfigUrl(context.Background(), "https://ton.org/global-config.json")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	api := ton.NewAPIClient(client)
 	scraper.api = api
 
-	return &scraper
+	return &scraper, nil
 }
 
 func (scraper *BMTonScraper) TotalUnderlying() (totalTon *big.Int, totalTonValue *big.Int, err error) {

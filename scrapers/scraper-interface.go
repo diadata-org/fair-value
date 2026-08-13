@@ -19,6 +19,7 @@ type IScraper interface {
 	DataChannel() chan models.FairValueData
 	Close() chan bool
 	GetConfig() models.FeedConfig
+	CapFairValueUSD() *float64
 }
 
 // // TO DO: Better to make an overall data factory and switch inside?
@@ -116,6 +117,11 @@ func MakeCERData(scraper IContractExchangeRate) (models.FairValueData, error) {
 		data.Denominator = big.NewInt(0)
 	}
 	data.PriceUSD = priceUSD
+	if cap := scraper.CapFairValueUSD(); cap != nil {
+		if priceUSD > *cap {
+			data.PriceUSD = *cap
+		}
+	}
 	data.FairValueNative = fairValueNative
 	data.Time = time.Now()
 	log.Debugf("price for address %s: %v", config.Address, data.PriceUSD)

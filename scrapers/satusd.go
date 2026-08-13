@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/diadata-org/fair-value/models"
@@ -25,7 +26,7 @@ type SatusdScraper struct {
 	config          models.FeedConfig
 }
 
-func NewSatusdScraper(config models.FeedConfig, metacontractData models.MetacontractData) *SatusdScraper {
+func NewSatusdScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*SatusdScraper, error) {
 
 	scraper := SatusdScraper{
 		BaseScraper:     NewBaseScraper(metacontractData),
@@ -38,12 +39,11 @@ func NewSatusdScraper(config models.FeedConfig, metacontractData models.Metacont
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_SATUSD", ""))
 	if err != nil {
-		log.Errorf("satUSD+ -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("satUSD+ -- make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 
-	return &scraper
+	return &scraper, nil
 
 }
 

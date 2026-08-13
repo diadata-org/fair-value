@@ -30,3 +30,16 @@ func ScaleFloat(f float64, decimals int) *big.Int {
 	priceScaled.Int(valueUSDInt)
 	return valueUSDInt
 }
+
+func MulFloatAndIntToInt(x float64, y *big.Int) *big.Int {
+	if y == nil {
+		return big.NewInt(0)
+	}
+	xf := new(big.Float).SetPrec(256).SetFloat64(x)
+	yf := new(big.Float).SetPrec(256).SetInt(y)
+	zf := new(big.Float).Mul(xf, yf)
+
+	out := new(big.Int)
+	zf.Int(out) // truncates toward zero
+	return out
+}

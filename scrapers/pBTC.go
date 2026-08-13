@@ -2,6 +2,7 @@ package scrapers
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strconv"
 
@@ -27,7 +28,7 @@ type pBTCScraper struct {
 	chunkSize       uint64
 }
 
-func NewpBTCScraper(config models.FeedConfig, metacontractData models.MetacontractData) *pBTCScraper {
+func NewpBTCScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*pBTCScraper, error) {
 
 	contractCreation, err := strconv.Atoi(utils.Getenv("CONTRACT_CREATION_PBTC", "24173056"))
 	if err != nil {
@@ -50,12 +51,11 @@ func NewpBTCScraper(config models.FeedConfig, metacontractData models.Metacontra
 
 	client, err := ethclient.Dial(utils.Getenv("RPC_NODE_EVM_PBTC", ""))
 	if err != nil {
-		log.Errorf("pBTC -- make eth client for %s: %v", config.Symbol, err)
-		return nil
+		return nil, fmt.Errorf("pBTC -- make eth client for %s: %v", config.Symbol, err)
 	}
 	scraper.client = client
 
-	return &scraper
+	return &scraper, nil
 
 }
 

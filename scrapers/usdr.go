@@ -27,7 +27,7 @@ type USDRScraper struct {
 	config          models.FeedConfig
 }
 
-func NewUSDRScraperScraper(config models.FeedConfig, metacontractData models.MetacontractData) *USDRScraper {
+func NewUSDRScraperScraper(config models.FeedConfig, metacontractData models.MetacontractData) (*USDRScraper, error) {
 	scraper := USDRScraper{
 		BaseScraper:     NewBaseScraper(metacontractData),
 		blockchain:      config.Blockchain,
@@ -38,7 +38,7 @@ func NewUSDRScraperScraper(config models.FeedConfig, metacontractData models.Met
 
 	scraper.getDataAddresses()
 
-	return &scraper
+	return &scraper, nil
 }
 
 func (scraper *USDRScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUnderlying *big.Int, err error) {

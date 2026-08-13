@@ -13,12 +13,13 @@ const FEED_CONFIG_SEPARATOR = "-"
 // Params[0]: poolID 				string
 // Params[1]: wallet addresses 		[]string
 type FeedConfig struct {
-	Symbol        string `json:"Symbol"`
-	FeedType      string `json:"Feed_Type"`
-	Address       string `json:"Address"`
-	Blockchain    string `json:"Blockchain"`
-	UpdateSeconds int    `json:"Update_Seconds"`
-	Params        []any  `json:"Params"`
+	Symbol        string  `json:"Symbol"`
+	FeedType      string  `json:"Feed_Type"`
+	Address       string  `json:"Address"`
+	Blockchain    string  `json:"Blockchain"`
+	UpdateSeconds int     `json:"Update_Seconds"`
+	CapUSDValue   float64 `json:"Cap_USD_Value"`
+	Params        []any   `json:"Params"`
 }
 
 // TO DO: How to address @Params? Can we assume Params[0] is always the feed differentiator?
