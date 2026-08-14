@@ -62,7 +62,7 @@ func (scraper *HohmScraper) Assets() (assetValueUSD *big.Int, native bool, err e
 		supply := balances.TotalAssets[i]
 		// TO DO: Get token.Symbol in order to query from the metacontract.
 		asset := models.Asset{Blockchain: models.ETHEREUM, Address: token.Hex()}
-		quotation, errGetPrice := asset.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+		quotation, errGetPrice := asset.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 		if errGetPrice != nil {
 			log.Errorf("hOHM -- failed to fetch price for %s: %v", token.Hex(), err)
 			return
@@ -103,7 +103,7 @@ func (scraper *HohmScraper) Liabilities() (liabilitiesValueUSD *big.Int, native 
 		// TO DO: get token.Symbol in order to query from the metacontract.
 		var quotation models.AssetQuotation
 		asset := models.Asset{Blockchain: models.ETHEREUM, Address: token.Hex()}
-		quotation, err = asset.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+		quotation, err = asset.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 		if err != nil {
 			log.Errorf("hOHM -- failed to fetch price for %s: %v", token.Hex(), err)
 			return

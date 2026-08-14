@@ -29,9 +29,10 @@ func (a *Asset) GetPrice(
 	metacontractAddress common.Address,
 	precision int,
 	client *ethclient.Client,
+	key string,
 ) (assetQuotation AssetQuotation, err error) {
 
-	assetQuotation, err = a.GetOnchainPrice(metacontractAddress, precision, client)
+	assetQuotation, err = a.GetOnchainPrice(metacontractAddress, precision, client, key)
 	if err != nil || assetQuotation.Price == 0 {
 		log.Warnf("On-chain price not available for symbol-address-blockchain:%s -- %s -- %s", a.Symbol, a.Blockchain, a.Address)
 		return a.GetPriceFromDiaAPI()
@@ -44,10 +45,12 @@ func (a *Asset) GetPrice(
 }
 
 // GetOnchainPrice returns a quotation for asset @a by querying the metacontract with @metacontractAddress.
+// If key is an empty string, query string defaults to a.Symbol+"/USD".
 func (a *Asset) GetOnchainPrice(
 	metacontractAddress common.Address,
 	precision int,
 	client *ethclient.Client,
+	key string,
 ) (aq AssetQuotation, err error) {
 
 	var caller *luminametacontract.MetacontractCaller
@@ -56,7 +59,10 @@ func (a *Asset) GetOnchainPrice(
 		return
 	}
 
-	priceBig, timeUnixBig, err := caller.GetValue(&bind.CallOpts{}, a.Symbol+"/USD")
+	if key == "" {
+		key = a.Symbol + "/USD"
+	}
+	priceBig, timeUnixBig, err := caller.GetValue(&bind.CallOpts{}, key)
 	if err != nil {
 		return
 	}

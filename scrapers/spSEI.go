@@ -62,7 +62,7 @@ func (scraper *SpSEIScraper) TotalUnderlying() (totalUnderlying *big.Int, totalV
 
 	// DIA Prices
 	SEI := models.Asset{Symbol: "SEI", Blockchain: models.SEICHAIN, Address: "0x0000000000000000000000000000000000000000"}
-	satusdQuotation, err := SEI.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+	satusdQuotation, err := SEI.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 	if err != nil {
 		log.Error("SpSEI -- GetPrice: ", err)
 	}
