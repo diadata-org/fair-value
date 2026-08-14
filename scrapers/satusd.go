@@ -61,7 +61,7 @@ func (scraper *SatusdScraper) TotalUnderlying() (totalUnderlying *big.Int, total
 
 	// DIA Prices
 	satUSD := models.Asset{Symbol: "satUSD", Blockchain: models.BINANCESMARTCHAIN, Address: "0xb4818BB69478730EF4e33Cc068dD94278e2766cB"}
-	satusdQuotation, err := satUSD.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+	satusdQuotation, err := satUSD.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 	if err != nil {
 		log.Error("satUSD+ -- GetPrice: ", err)
 	}

@@ -69,10 +69,11 @@ func (s *SVUSDScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUn
 	if err != nil {
 		return
 	}
-	// First try to fetch price from fair-value metacontract.
-	quoteUnderlying, err := underlyingAsset.GetPrice(s.metacontractFV.Address, s.metacontractFV.Precision, s.metacontractFV.Client)
-	if err != nil {
-		quoteUnderlying, err = underlyingAsset.GetPrice(s.metacontractData.Address, s.metacontractData.Precision, s.metacontractData.Client)
+	// First try to fetch price from fair-value metacontract. Fallback to market price.
+	fvKey := "usdValue:" + underlyingAsset.Symbol
+	quoteUnderlying, err := underlyingAsset.GetOnchainPrice(s.metacontractFV.Address, s.metacontractFV.Precision, s.metacontractFV.Client, fvKey)
+	if err != nil || quoteUnderlying.Price == 0.0 {
+		quoteUnderlying, err = underlyingAsset.GetPrice(s.metacontractData.Address, s.metacontractData.Precision, s.metacontractData.Client, "")
 		if err != nil {
 			return
 		}

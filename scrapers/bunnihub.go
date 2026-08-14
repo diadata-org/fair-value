@@ -84,13 +84,13 @@ func (scraper *BunnihubScraper) TotalUnderlying() (totalUnderlying *big.Int, tot
 
 	// DIA Prices
 	eth := models.Asset{Symbol: "ETH", Blockchain: models.ETHEREUM, Address: "0x0000000000000000000000000000000000000000"}
-	ethQuotation, err := eth.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+	ethQuotation, err := eth.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 	if err != nil {
 		log.Error("bunnihub -- GetPrice for ETH: ", err)
 		return
 	}
 	usdc := models.Asset{Symbol: "USDC", Blockchain: models.ETHEREUM, Address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"}
-	usdcQuotation, err := usdc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+	usdcQuotation, err := usdc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 	if err != nil {
 		log.Error("bunnihub -- GetPrice for USDC: ", err)
 		return

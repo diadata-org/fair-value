@@ -80,7 +80,7 @@ func (scraper *hemiBTCScraper) TotalUnderlying() (totalUnderlying *big.Int, tota
 
 	// Compute totalValueUnderlying.
 	btc := models.Asset{Symbol: "BTC", Blockchain: models.BITCOIN, Address: "0x0000000000000000000000000000000000000000"}
-	quotationBitcoin, err := btc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client)
+	quotationBitcoin, err := btc.GetPrice(scraper.metacontractData.Address, scraper.metacontractData.Precision, scraper.metacontractData.Client, "")
 	if err != nil {
 		log.Error("hemiBTC -- GetDiaQuotationPrice: ", err)
 	}
