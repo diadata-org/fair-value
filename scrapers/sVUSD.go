@@ -1,6 +1,7 @@
 package scrapers
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -73,6 +74,10 @@ func (s *SVUSDScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUn
 	fvKey := "usdValue:" + underlyingAsset.Symbol
 	quoteUnderlying, err := underlyingAsset.GetOnchainPrice(s.metacontractFV.Address, s.metacontractFV.Precision, s.metacontractFV.Client, fvKey)
 	if err != nil {
+		return
+	}
+	if quoteUnderlying.Price == 0.0 {
+		err = errors.New("price of underlying asset is 0")
 		return
 	}
 
