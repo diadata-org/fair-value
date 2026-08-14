@@ -1,7 +1,6 @@
 package scrapers
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -77,7 +76,7 @@ func (s *SVUSDScraper) TotalUnderlying() (totalUnderlying *big.Int, totalValueUn
 		return
 	}
 	if quoteUnderlying.Price == 0.0 {
-		err = errors.New("price of underlying asset is 0")
+		err = fmt.Errorf("sVUSD -- fair-value price of underlying asset %s is 0", underlyingAsset.Symbol)
 		return
 	}
 
