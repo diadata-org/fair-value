@@ -34,7 +34,11 @@ func (a *Asset) GetPrice(
 
 	assetQuotation, err = a.GetOnchainPrice(metacontractAddress, precision, client, key)
 	if err != nil || assetQuotation.Price == 0 {
-		log.Warnf("On-chain price not available for symbol-address-blockchain:%s -- %s -- %s", a.Symbol, a.Blockchain, a.Address)
+		if key != "" {
+			log.Warnf("On-chain price not available for key-address-blockchain:%s -- %s -- %s", key, a.Blockchain, a.Address)
+		} else {
+			log.Warnf("On-chain price not available for symbol-address-blockchain:%s -- %s -- %s", a.Symbol, a.Blockchain, a.Address)
+		}
 		return a.GetPriceFromDiaAPI()
 	}
 
@@ -60,6 +64,10 @@ func (a *Asset) GetOnchainPrice(
 	}
 
 	if key == "" {
+		if a.Symbol == "" {
+			err = errors.New("empty query string is an invalid request")
+			return
+		}
 		key = a.Symbol + "/USD"
 	}
 	priceBig, timeUnixBig, err := caller.GetValue(&bind.CallOpts{}, key)
