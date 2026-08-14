@@ -1,6 +1,7 @@
 name: Lint
 
-on: false
+on:
+  workflow_dispatch:
 
 permissions:
   contents: read
