@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type GitHubContent struct {
@@ -15,14 +18,14 @@ type GitHubContent struct {
 	Encoding string `json:"encoding"`
 }
 
-func ReadFile(filename string, remoteConfig bool, branchConfig string) ([]byte, error) {
+func ReadFile(filename string, remoteConfig bool, branchConfig string, githubToken string) ([]byte, error) {
 	if remoteConfig {
-		return readFromRemote(filename, branchConfig)
+		return readFromRemote(filename, branchConfig, githubToken)
 	}
 	return readFromFile(filename)
 }
 
-func readFromRemote(filename string, branchConfig string) (data []byte, err error) {
+func readFromRemote(filename string, branchConfig string, githubToken string) (data []byte, err error) {
 
 	URL := "https://api.github.com/repos/diadata-org/fair-value/contents/config/" + filename
 	if branchConfig != "" {
@@ -30,6 +33,14 @@ func readFromRemote(filename string, branchConfig string) (data []byte, err erro
 	}
 
 	req, _ := http.NewRequest("GET", URL, nil)
+
+	//Optional authentication
+	if githubToken != "" {
+		log.Info("Set github token for API requests")
+		req.Header.Set("Authorization", "token "+githubToken)
+	}
+
+	time.Sleep(350 * time.Millisecond)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

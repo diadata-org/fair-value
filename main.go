@@ -111,7 +111,8 @@ func main() {
 
 	// fetch configuration from master branch per default.
 	branchConfig := utils.Getenv("BRANCH_CONFIG", "")
-	feedConfigs, err = models.GetFeedsFromConfig("fair-value-feeds.json", remoteConfig, branchConfig)
+	githubToken := utils.Getenv("GITHUB_TOKEN", "")
+	feedConfigs, err = models.GetFeedsFromConfig("fair-value-feeds.json", remoteConfig, branchConfig, githubToken)
 	if err != nil {
 		log.Fatal("GetFeedsFromConfig: ", err)
 	}
@@ -145,7 +146,7 @@ func main() {
 
 		for range configTicker.C {
 
-			feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json", remoteConfig, branchConfig)
+			feedConfigsNew, err = models.GetFeedsFromConfig("fair-value-feeds.json", remoteConfig, branchConfig, githubToken)
 			if err != nil {
 				log.Error("GetFeedsFromConfig: ", err)
 			}
