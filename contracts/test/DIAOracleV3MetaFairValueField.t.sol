@@ -238,6 +238,11 @@ struct TestCase {
                 continue;
             }
 
+            // Skip future-dated rows (contract rejects ts > blockTimestamp)
+            if (testCase.oracleValues[i].timestamp > testCase.blockTimestamp) {
+                continue;
+            }
+
             // Check if timestamp is within timeout window
             uint256 timeDiff = testCase.blockTimestamp >= testCase.oracleValues[i].timestamp
                 ? testCase.blockTimestamp - testCase.oracleValues[i].timestamp
@@ -245,6 +250,17 @@ struct TestCase {
 
             // Skip stale data
             if (timeDiff > testCase.timeoutSeconds) {
+                continue;
+            }
+
+            // Skip rows with any field above _MAX_FIELD_VALUE (contract filters
+            // them at collection; keeps this helper a faithful reference oracle)
+            if (
+                testCase.oracleValues[i].fairValue > type(uint128).max
+                    || testCase.oracleValues[i].usdValue > type(uint128).max
+                    || testCase.oracleValues[i].numerator > type(uint128).max
+                    || testCase.oracleValues[i].denominator > type(uint128).max
+            ) {
                 continue;
             }
 
@@ -829,20 +845,22 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
         testCases[0].oracleValues[1] = OracleData(2e18, 2e18, 2, 1, 1000000, false);
         testCases[0].oracleValues[2] = OracleData(3e18, 3e18, 3, 1, 1000000, false);
 
-        // Test Case 2: Zero values (skipped in median calculation)
+        // Test Case 2: Zero values — the leading-zero skip shrinks the contributing
+        // set below threshold, which must now revert explicitly instead of returning
+        // a "median" computed from a single row.
         testCases[1] = TestCase({
             name: "Zero values",
             oracleValues: new OracleData[](3),
             threshold: 2,
             timeoutSeconds: 3600,
             blockTimestamp: 1000000,
-            expectedFairValue: 100,  // Zeros are skipped, median of [100] = 100
-            expectedUsdValue: 1000,  // Corresponding usdValue from the same oracle
-            expectedNumerator: 1,
-            expectedDenominator: 1,
-            shouldRevert: false,
-            expectedError: bytes4(0),
-            expectedErrorCount: 0
+            expectedFairValue: 0,
+            expectedUsdValue: 0,
+            expectedNumerator: 0,
+            expectedDenominator: 0,
+            shouldRevert: true,
+            expectedError: DIAOracleV3MetaFairValueField.ThresholdNotMet.selector,
+            expectedErrorCount: 1  // 2 zeros skipped, only 1 row contributes
         });
         testCases[1].oracleValues[0] = OracleData(0, 0, 0, 1, 1000000, false);
         testCases[1].oracleValues[1] = OracleData(0, 0, 0, 1, 1000000, false);
@@ -1702,6 +1720,9 @@ contract TimestampTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 1000);
+        // Future-dated writes are allowed by the mock; advance time so all rows
+        // are at or before block.timestamp (fresh under the staleness check).
+        vm.warp(baseTimestamp + 1000);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -1723,6 +1744,7 @@ contract TimestampTest is BaseTest {
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 400);
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 600);
         setStoreValues(store4, TEST_KEY, 400, 4000, 4, 1, baseTimestamp + 1000);
+        vm.warp(baseTimestamp + 1000);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -1743,6 +1765,7 @@ contract TimestampTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 300, 3000, 3, 1, baseTimestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
         setStoreValues(store3, TEST_KEY, 100, 1000, 1, 1, baseTimestamp + 1000);
+        vm.warp(baseTimestamp + 1000);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -1765,6 +1788,7 @@ contract TimestampTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, currentTimestamp);           // Fresh
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, currentTimestamp + 500);    // Fresh
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, currentTimestamp - 3700); // Stale
+        vm.warp(currentTimestamp + 500);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -1785,6 +1809,7 @@ contract TimestampTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 1000);
+        vm.warp(baseTimestamp + 1000);
 
         // Test getValue with fairValue key
         (uint128 value, uint128 ts) = oracle.getValue("fairValue:BTC/USD");
@@ -1804,6 +1829,7 @@ contract TimestampTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 200, 2000, 2, 1, baseTimestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 500);
         setStoreValues(store3, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 1000);
+        vm.warp(baseTimestamp + 1000);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -1825,6 +1851,10 @@ contract TimestampTest is BaseTest {
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, baseTimestamp);
         setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, baseTimestamp + 3600);  // 1 hour later
         setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, baseTimestamp + 7200);  // 2 hours later
+        // Advance past the newest row and widen the timeout so all rows stay fresh
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(1 days);
+        vm.warp(baseTimestamp + 7200);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -1965,10 +1995,12 @@ contract QuickSortStackExhaustionTest is BaseTest {
             uint256 numOracles = sizes[j];
             uint256 timestamp = block.timestamp;
 
-            // Create stores
+            // Create stores (values start at 100: a zero principal row would be
+            // skipped by the median's leading-zero filter and shrink the
+            // contributing set below threshold)
             for (uint256 i = 0; i < numOracles; i++) {
                 MockValueStore store = createMockStore();
-                setStoreValues(store, TEST_KEY, i * 100, i * 1000, i + 1, 1, timestamp);
+                setStoreValues(store, TEST_KEY, (i + 1) * 100, (i + 1) * 1000, i + 1, 1, timestamp);
             }
 
              // Use at least 2 for threshold, but cap at numOracles
@@ -2035,10 +2067,12 @@ contract QuickSortStackExhaustionTest is BaseTest {
             oracle.setMaxValueStores(1000);
         }
 
-        // Create stores
+        // Create stores (values start at 100: a zero principal row would be
+        // skipped by the median's leading-zero filter and shrink the
+        // contributing set below threshold)
         for (uint256 i = 0; i < numOracles; i++) {
             MockValueStore store = createMockStore();
-            setStoreValues(store, TEST_KEY, i * 100, i * 1000, i + 1, 1, timestamp);
+            setStoreValues(store, TEST_KEY, (i + 1) * 100, (i + 1) * 1000, i + 1, 1, timestamp);
         }
 
         uint256 testThreshold = numOracles >= 2 ? 2 : 1;
@@ -2232,6 +2266,7 @@ contract DuplicateValuesPerformanceTest is BaseTest {
             // Same value, different timestamps
             setStoreValues(store, TEST_KEY, 1000, 10000, i + 1, 1, baseTimestamp + i);
         }
+        vm.warp(baseTimestamp + 149);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
@@ -2701,17 +2736,22 @@ contract InvariantPropertiesTest is BaseTest {
         uint256 numOracles = 5;
         uint256 baseTimestamp = block.timestamp;
 
+        uint256[] memory oracleTs = new uint256[](numOracles);
         for (uint256 i = 0; i < numOracles; i++) {
             MockValueStore store = createMockStore();
-            setStoreValues(store, TEST_KEY, 1000 + (i * 100), 10000 + (i * 1000), i + 1, 1, baseTimestamp + (i * 1000));
+            oracleTs[i] = baseTimestamp + (i * 1000);
+            setStoreValues(store, TEST_KEY, 1000 + (i * 100), 10000 + (i * 1000), i + 1, 1, oracleTs[i]);
         }
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(1 days);
+        vm.warp(baseTimestamp + 4000);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Timestamp should be one of the oracle timestamps
         bool found = false;
         for (uint256 i = 0; i < numOracles; i++) {
-            if (result.timestamp == baseTimestamp + (i * 1000)) {
+            if (result.timestamp == oracleTs[i]) {
                 found = true;
                 break;
             }
@@ -2790,20 +2830,29 @@ contract InvariantPropertiesTest is BaseTest {
             oracle.setTimeoutSeconds(3600);
         }
 
-        // Add stores with fuzzed values
-        for (uint256 i = 0; i < 20; i++) {
-            MockValueStore store = createMockStore();
-            uint256 fairValue = uint256(values[i]);
-            setStoreValues(store, TEST_KEY, fairValue, fairValue * 10, i + 1, 1, timestamp);
+        // Add stores with fuzzed values, Zero fairValues are skipped by the median
+        unchecked {
+            for (uint256 i = 0; i < 20; i++) {
+                MockValueStore store = createMockStore();
+                uint256 fairValue = uint256(values[i]);
+                uint256 usdValue = fairValue * 10;
+                if (usdValue > type(uint128).max) usdValue = type(uint128).max;
+                setStoreValues(store, TEST_KEY, fairValue, usdValue, i + 1, 1, timestamp);
+            }
         }
 
         vm.prank(owner);
         oracle.setThreshold(20);
 
-        // Get median - should never revert or produce invalid results
-        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
-
-        assertTrue(true, "Median computed successfully for any input");
+        // Get median, must either compute or fail with an explicit data-quality
+         try oracle.getMedianValues(TEST_KEY) returns (DIAOracleV3MetaFairValueField.MedianSet memory) {
+        } catch Error(string memory) {
+            assertTrue(false, "unexpected string revert");
+        } catch Panic(uint256) {
+            assertTrue(false, "must never panic");
+        } catch (bytes memory) {
+            // custom data-quality error: acceptable
+        }
     }
 
     function test_Invariant_OrderPreservation_MultipleKeys() public {
@@ -2837,6 +2886,16 @@ contract InvariantPropertiesTest is BaseTest {
 /// @notice Tests precision and accuracy of median calculations
 contract MedianPrecisionTest is BaseTest {
     // Precision tests for median calculation
+
+    function setUp() public override {
+        // Standardize: explicit timeout instead of the default 0 (which makes only
+        // ts == block.timestamp fresh — fragile). Threshold stays at the default 0:
+        // these tests assert median range/precision, and testFuzz_Precision_AlwaysValid
+        // tears stores down to zero, below any nonzero threshold.
+        super.setUp();
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(1 days);
+    }
 
     function test_Precision_EvenCount_RoundingBehavior() public {
         // Tests that the contract uses ROUNDING (a+b+1)/2, not exact division (a+b)/2
@@ -3297,20 +3356,27 @@ contract MedianPrecisionTest is BaseTest {
         setStoreValues(store3, TEST_KEY, valC, valC * 10, 1, 1, timestamp);
         setStoreValues(store4, TEST_KEY, valD, valD * 10, 1, 1, timestamp);
 
-        // Should never revert
-        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+        // Must either compute or revert with the explicit AllPrincipalEntriesZero
+        // custom error (all four values landing on multiples of 1e18 -> all zero
+        // rows -> filteredCount == 0). Mirrors the catch pattern at ~:2832.
+        try oracle.getMedianValues(TEST_KEY) returns (DIAOracleV3MetaFairValueField.MedianSet memory result) {
+            // Result should be within min-max range
+            uint256 minVal = valA;
+            uint256 maxVal = valA;
+            if (valB < minVal) minVal = valB;
+            if (valB > maxVal) maxVal = valB;
+            if (valC < minVal) minVal = valC;
+            if (valC > maxVal) maxVal = valC;
+            if (valD < minVal) minVal = valD;
+            if (valD > maxVal) maxVal = valD;
 
-        // Result should be within min-max range
-        uint256 minVal = valA;
-        uint256 maxVal = valA;
-        if (valB < minVal) minVal = valB;
-        if (valB > maxVal) maxVal = valB;
-        if (valC < minVal) minVal = valC;
-        if (valC > maxVal) maxVal = valC;
-        if (valD < minVal) minVal = valD;
-        if (valD > maxVal) maxVal = valD;
-
-        assertTrue(result.fairValue >= minVal && result.fairValue <= maxVal, "Median should be within range");
+            assertTrue(result.fairValue >= minVal && result.fairValue <= maxVal, "Median should be within range");
+        } catch Panic(uint256) {
+            assertTrue(false, "must never panic");
+        } catch (bytes memory) {
+            // AllPrincipalEntriesZero (and ThresholdNotMet for partial-zero sets):
+            // explicit data-quality custom errors — acceptable
+        }
     }
 
     function test_Precision_TimestampSelection() public {
@@ -3323,20 +3389,28 @@ contract MedianPrecisionTest is BaseTest {
         uint256 timestamp3 = timestamp2 + 1;
         uint256 timestamp4 = timestamp3 + 1;
 
+   
+        uint256[4] memory ts = [timestamp1, timestamp2, timestamp3, timestamp4];
+
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
         MockValueStore store3 = createMockStore();
         MockValueStore store4 = createMockStore();
 
+ 
+        vm.prank(owner);
+        oracle.setTimeoutSeconds(1 days);
+
         setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp1);
         setStoreValues(store2, TEST_KEY, 200, 2000, 1, 1, timestamp2);
         setStoreValues(store3, TEST_KEY, 300, 3000, 1, 1, timestamp3);
         setStoreValues(store4, TEST_KEY, 400, 4000, 1, 1, timestamp4);
+        vm.warp(ts[3]);
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
         // Timestamp should be from the right element of the middle pair (300@t3)
-        assertEq(result.timestamp, timestamp3, "Timestamp should be from right middle element");
+        assertEq(result.timestamp, ts[2], "Timestamp should be from right middle element");
     }
 
     function test_Precision_ZeroValues() public {
@@ -3425,9 +3499,13 @@ contract OverflowEdgeCaseTest is BaseTest {
         oracle.setTimeoutSeconds(3600);
     }
 
-    function test_Overflow_FairValueSum_Overflows() public {
-        // Test that overflow in fairValue sum is caught
-        // Solidity 0.8.30 has built-in overflow checks that should revert
+    /// @dev Oversized (above _MAX_FIELD_VALUE) fairValue/usdValue rows are filtered
+    ///      at collection. Overflow-safe averaging (_averageRoundUp) and the sort's
+    ///      `<=` comparison can never see out-of-uint128 values anymore — the cap
+    ///      makes the old "aggregation survives huge values" scenarios unreachable
+    ///      by construction. These tests now pin the FILTER behavior.
+    function test_FieldBound_OversizedFairValues_FilteredOut_ThresholdNotMet() public {
+
 
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
@@ -3437,22 +3515,40 @@ contract OverflowEdgeCaseTest is BaseTest {
         uint256 timestamp = block.timestamp;
         uint256 maxVal = type(uint256).max;
 
-        // Create values where sum of middle two will overflow
-        // Middle two will be maxVal and maxVal
-        // sumFair = maxVal + maxVal (OVERFLOWS!)
-        setStoreValues(store1, TEST_KEY, maxVal - 1, maxVal, 1, 1, timestamp);
+        setStoreValues(store1, TEST_KEY, 1e18, 1, 1, 1, timestamp);
         setStoreValues(store2, TEST_KEY, maxVal, maxVal, 1, 1, timestamp);
         setStoreValues(store3, TEST_KEY, maxVal, maxVal, 1, 1, timestamp);
         setStoreValues(store4, TEST_KEY, maxVal, maxVal, 1, 1, timestamp);
 
-        // Should revert due to overflow in fairValue sum
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ThresholdNotMet.selector, 1, 2)
+        );
         oracle.getMedianValues(TEST_KEY);
     }
 
+    function test_Overflow_FieldBound_Boundary_Exact() public {
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        uint256 bound = type(uint128).max;
+
+        setStoreValues(store1, TEST_KEY, bound, bound, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, bound, bound, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, bound + 1, 1, 1, 1, timestamp); // skipped
+
+        // count = 2 (even) -> average of two bound values = bound, no cast revert
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+        assertEq(result.fairValue, bound, "average(bound, bound) = bound");
+        assertEq(result.usdValue, bound, "usd average at bound");
+
+        (uint128 v,) = oracle.getValue("fairValue:BTC/USD");
+        assertEq(uint256(v), bound, "uint128 consumer path serves bound values");
+    }
+
     function test_Overflow_FairValueSum_NearMaximum() public {
-        // Test with very large values that DON'T overflow
-        // Verifies the contract can handle large but safe values
 
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
@@ -3477,10 +3573,8 @@ contract OverflowEdgeCaseTest is BaseTest {
         assertEq(result.fairValue, 2.5e18, "Should handle large values");
     }
 
-    function test_Overflow_RoundingIncrement_Overflow() public {
-        // Test overflow in the +1 for rounding
-        // When sumFair = type(uint256).max, adding 1 should overflow
-
+    function test_FieldBound_HalfMaxValues_FilteredOut_ThresholdNotMet() public {
+        
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
         MockValueStore store3 = createMockStore();
@@ -3488,23 +3582,24 @@ contract OverflowEdgeCaseTest is BaseTest {
 
         uint256 timestamp = block.timestamp;
 
-        // Values where sumFair = max but adding 1 overflows
-        // Need: fairValues[mid1] + fairValues[mid2] = type(uint256).max
+        // val1 + val2 == type(uint256).max — both far above the uint128 bound.
         uint256 val1 = type(uint256).max / 2;
         uint256 val2 = type(uint256).max - val1;
 
-        setStoreValues(store1, TEST_KEY, val1 - 1000, val1 - 1000, 1, 1, timestamp);
-        setStoreValues(store2, TEST_KEY, val1, val1, 1, 1, timestamp);
-        setStoreValues(store3, TEST_KEY, val2, val2, 1, 1, timestamp);
-        setStoreValues(store4, TEST_KEY, val2 + 1000, val2 + 1000, 1, 1, timestamp);
+        setStoreValues(store1, TEST_KEY, val1 - 1000, 1, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, val1, 1, 1, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, val2, 1, 1, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, val2 + 1000, 1, 1, 1, timestamp);
 
-        // Should revert when trying to add 1 to max
-        vm.expectRevert();
+        // No row survives the bound -> ThresholdNotMet(0, 2), no overflow possible.
+        vm.expectRevert(
+            abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ThresholdNotMet.selector, 0, 2)
+        );
         oracle.getMedianValues(TEST_KEY);
     }
 
-    function test_Overflow_UsdValueSum_Overflows() public {
-        // Test overflow in usdValue sum (separate from fairValue)
+    function test_FieldBound_OversizedUsdValues_FilteredOut_ThresholdNotMet() public {
+
 
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
@@ -3514,14 +3609,15 @@ contract OverflowEdgeCaseTest is BaseTest {
         uint256 timestamp = block.timestamp;
         uint256 maxVal = type(uint256).max;
 
-        // Same fairValues, but usdValues overflow
+        // All four rows carry oversized usdValues -> all skipped.
         setStoreValues(store1, TEST_KEY, 100, maxVal, 1, 1, timestamp);
         setStoreValues(store2, TEST_KEY, 200, maxVal, 1, 1, timestamp);
         setStoreValues(store3, TEST_KEY, 300, maxVal, 1, 1, timestamp);
         setStoreValues(store4, TEST_KEY, 400, maxVal, 1, 1, timestamp);
 
-        // Should revert due to overflow in usdValue sum
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ThresholdNotMet.selector, 0, 2)
+        );
         oracle.getMedianValues(TEST_KEY);
     }
 
@@ -3646,6 +3742,62 @@ contract OverflowEdgeCaseTest is BaseTest {
 
         // Odd count: should return the middle value (store2's value) - no summing
         assertEq(result.fairValue, largeValue * 2, "Should handle very large values with odd count");
+    }
+
+    function test_FieldBound_HugeFairValues_FilteredOut_ThresholdNotMet() public {
+
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+        uint256 half = type(uint256).max / 2;
+
+        // All three fairValues are above the uint128 bound -> all skipped.
+        setStoreValues(store1, TEST_KEY, half, 10, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, half + 1, 20, 2, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, half + 2, 30, 3, 1, timestamp);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DIAOracleV3MetaFairValueField.ThresholdNotMet.selector, 0, 2)
+        );
+        oracle.getMedianValues(TEST_KEY);
+    }
+
+    function test_AverageRoundUp_ParityWithNaiveFormula() public {
+        uint256[6] memory samples = [uint256(0), 1, 2, 3, 100, 101];
+        for (uint256 i = 0; i < samples.length; i++) {
+            for (uint256 j = 0; j < samples.length; j++) {
+                uint256 a = samples[i];
+                uint256 b = samples[j];
+                uint256 naive = (a + b + 1) / 2;
+                uint256 safe = a / 2 + b / 2 + (a % 2 + b % 2 + 1) / 2;
+                assertEq(safe, naive, "overflow-safe average must match (a+b+1)/2");
+            }
+        }
+    }
+
+    function test_Overflow_InsertionSortRange_MaxValue_NoLongerReverts() public {
+
+        uint256 timestamp = block.timestamp;
+        uint256 maxVal = type(uint256).max;
+
+        // setUp already added 3 stores; add enough to exceed the QuickSort threshold (>10).
+        // Total valid stores here: 3 (empty, will revert in getValue) + 13 = collected 13.
+        uint256 numStores = 13;
+        for (uint256 i = 0; i < numStores; i++) {
+            MockValueStore store = createMockStore();
+            uint256 fv = (i == 6) ? type(uint128).max : (100 + i);
+            setStoreValues(store, TEST_KEY, fv, 1000 + i, 1, 1, timestamp);
+        }
+
+        // Must not revert (previously reverted on the maxVal element's comparison).
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+
+        // Odd count (13) => median is the 7th smallest fairValue. Values are
+        // {100..112} \ {106} plus 2^128-1, i.e. [100..105,107..112,2^128-1].
+        // Sorted ascending, index 6 (0-based) is 107.
+        assertEq(result.fairValue, 107, "Median should be the middle sorted value, sort must not revert");
     }
 }
 
@@ -3963,13 +4115,11 @@ contract SecurityTest is BaseTest {
         // store3 reports FUTURE timestamp (potential manipulation)
         setStoreValues(store3, TEST_KEY, 999999, 9999990, 1, 1, futureTimestamp);
 
-        //  DEFENSE: Future timestamps should be accepted (Oracle's responsibility to validate)
-        // The contract uses oracle data as-is; timestamp validation is the oracle's job
+        //Future-dated rows are now REJECTED by the staleness check
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // Result will include the future-timestamped value
-        // This is EXPECTED behavior - timestamp validation is the oracle's responsibility
-        assertEq(result.fairValue, 200, "Median includes future-timestamped value");
+        // Result is computed from the two honest, current rows only
+        assertEq(result.fairValue, 150, "Future-timestamped value must be excluded");
 
 
     }
@@ -4038,8 +4188,8 @@ contract SecurityTest is BaseTest {
         oracle.removeValueStore(address(store3));
 
         // Now no stores remain - oracle returns no data
-        //  EXPECTED: Panic when trying to get median with 0 oracles (arithmetic underflow in division)
-        vm.expectRevert(); // Will panic due to division by zero in calculation
+        // Clean failure: with 0 collected rows and threshold 0, the median path
+        vm.expectRevert(DIAOracleV3MetaFairValueField.AllPrincipalEntriesZero.selector);
         oracle.getMedianValues(TEST_KEY);
 
  
