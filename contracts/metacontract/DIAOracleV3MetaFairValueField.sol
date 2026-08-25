@@ -252,10 +252,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             try store.getValue(key) returns (uint256 fairV, uint256 usdV, uint256 num, uint256 den, uint256 ts) {
                 if (ts > block.timestamp) continue;
                 if (block.timestamp - ts > timeoutSeconds) continue;
-                if (
-                    fairV > _MAX_FIELD_VALUE || usdV > _MAX_FIELD_VALUE || num > _MAX_FIELD_VALUE
-                        || den > _MAX_FIELD_VALUE
-                ) continue;
+                // Values are required to fit in uint128 because getValue() SafeCasts MedianSet fields to uint128.
+                if (fairV > _MAX_FIELD_VALUE || usdV > _MAX_FIELD_VALUE || num > _MAX_FIELD_VALUE || den > _MAX_FIELD_VALUE) continue;
 
                 fairValues[count] = fairV;
                 usdValues[count] = usdV;
