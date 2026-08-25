@@ -36,6 +36,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     bytes32 private constant _DENOMINATOR = keccak256("denominator");
     uint256 private constant _MAX_TIMEOUT_SECONDS = 1 days;
     uint256 private constant _DEFAULT_MAX_VALUE_STORES = 100;
+    uint256 private constant _MAX_FIELD_VALUE = type(uint128).max;
 
     error InvalidThreshold(uint256);
     error InvalidMaxValueStores(uint256);
@@ -202,7 +203,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         bool isFairValueSort = _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
 
-        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, isFairValueSort);
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, isFairValueSort, threshold);
     }
 
     /// @notice Initialize value arrays for collecting data from stores
@@ -249,7 +250,12 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         for (uint256 i = 0; i < storeCount; ++i) {
             IValueStore store = IValueStore(valueStores[i]);
             try store.getValue(key) returns (uint256 fairV, uint256 usdV, uint256 num, uint256 den, uint256 ts) {
-                if (ts + timeoutSeconds < block.timestamp) continue;
+                if (ts > block.timestamp) continue;
+                if (block.timestamp - ts > timeoutSeconds) continue;
+                if (
+                    fairV > _MAX_FIELD_VALUE || usdV > _MAX_FIELD_VALUE || num > _MAX_FIELD_VALUE
+                        || den > _MAX_FIELD_VALUE
+                ) continue;
 
                 fairValues[count] = fairV;
                 usdValues[count] = usdV;
@@ -287,12 +293,16 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     ) private pure returns (bool isFairValueSort) {
         if (count == 0) return true; // Default/fallback: fairValue sort
 
-        uint256 fairSum = 0;
+
+        bool anyFairNonZero = false;
         for (uint256 i = 0; i < count; ++i) {
-            fairSum += fairValues[i];
+            if (fairValues[i] != 0) {
+                anyFairNonZero = true;
+                break;
+            }
         }
 
-        if (fairSum != 0) {
+        if (anyFairNonZero) {
             _sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
             return true; // Sorted by fairValues
         } else {
@@ -311,6 +321,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     /// @param dens Sorted array of denominators
     /// @param timestamps Sorted array of timestamps
     /// @param count Number of elements to consider
+    /// @param isFairValueSort Whether arrays were sorted by fairValue (else usdValue)
+    /// @param threshold Minimum number of entries that must contribute to the median
     /// @return median MedianSet containing median values and timestamp
     function _calculateMedian(
         uint256[] memory fairValues,
@@ -319,7 +331,8 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256[] memory dens,
         uint256[] memory timestamps,
         uint256 count,
-        bool isFairValueSort
+        bool isFairValueSort,
+        uint256 threshold
     ) private pure returns (MedianSet memory) {
         uint256[] memory principalArray = isFairValueSort ? fairValues : usdValues;
         uint256 startIdx = 0;
@@ -332,6 +345,10 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         uint256 filteredCount = count - startIdx;
         if (filteredCount == 0) {
             revert AllPrincipalEntriesZero();
+        }
+
+        if (filteredCount < threshold) {
+            revert ThresholdNotMet(filteredCount, threshold);
         }
 
         uint256 mid1;
@@ -352,13 +369,23 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             mid1 = base + arrayMid - 1;
             mid2 = base + arrayMid;
             return MedianSet(
-                (fairValues[mid1] + fairValues[mid2] + 1) / 2,
-                (usdValues[mid1] + usdValues[mid2] + 1) / 2,
-                (nums[mid1] + nums[mid2] + 1) / 2,
-                (dens[mid1] + dens[mid2] + 1) / 2,
+                _averageRoundUp(fairValues[mid1], fairValues[mid2]),
+                _averageRoundUp(usdValues[mid1], usdValues[mid2]),
+                _averageRoundUp(nums[mid1], nums[mid2]),
+                _averageRoundUp(dens[mid1], dens[mid2]),
                 timestamps[mid1] > timestamps[mid2] ? timestamps[mid1] : timestamps[mid2]
             );
         }
+    }
+
+    /// @notice Compute the round-half-up average of two values without overflow
+    /// @dev Equivalent to (a + b + 1) / 2 but never overflows for any uint256 inputs,
+    ///      since it avoids forming the intermediate sum a + b.
+    /// @param a First value
+    /// @param b Second value
+    /// @return The average of a and b, rounded up on ties
+    function _averageRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
+        return a / 2 + b / 2 + (a % 2 + b % 2 + 1) / 2;
     }
 
     /// @notice Sort main array ascending and reorder auxiliary arrays in parallel
@@ -639,7 +666,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
             while (j > left) {
                 uint256 prev = j - 1;
-                if (main[prev] < keyMain + 1) break;
+                if (main[prev] <= keyMain) break;
 
                 main[j] = main[prev];
                 a[j] = a[prev];
