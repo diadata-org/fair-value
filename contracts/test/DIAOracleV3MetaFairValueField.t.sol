@@ -3780,8 +3780,6 @@ contract OverflowEdgeCaseTest is BaseTest {
     function test_Overflow_InsertionSortRange_MaxValue_NoLongerReverts() public {
 
         uint256 timestamp = block.timestamp;
-        uint256 maxVal = type(uint256).max;
-
         // setUp already added 3 stores; add enough to exceed the QuickSort threshold (>10).
         // Total valid stores here: 3 (empty, will revert in getValue) + 13 = collected 13.
         uint256 numStores = 13;
