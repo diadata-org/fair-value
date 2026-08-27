@@ -1,5 +1,22 @@
 {
     "Feeds": [
+         {
+            "Symbol": "VUSD",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0xC8317A10385BE07901A4c9ee3d06E1D83AE378c9",
+            "Blockchain": "Ethereum",
+            "Update_Seconds": 240,
+            "Cap_USD_Value": 1.0,
+            "Params": ["", ["false"]]
+        },
+        {
+            "Symbol": "sVUSD",
+            "Feed_Type": "CONTRACT_EXCHANGE_RATE",
+            "Address": "0x476310E34D2810f7d79C43A74E4D79405bd7a925",
+            "Blockchain": "Ethereum",
+            "Update_Seconds": 240,
+            "Params": ["", []]
+        },
         {
             "Symbol": "spSEI",
             "Feed_Type": "CONTRACT_EXCHANGE_RATE",
