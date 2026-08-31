@@ -185,9 +185,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         emit MaxValueStoresChanged(oldMaxValueStores, newMaxValueStores);
     }
 
-    /// @notice Get median values from all registered ValueStores
+    /// @notice Get median values from all registered ValueStores, sorted by fairValue
     /// @param key The key to query from ValueStores
-    /// @return median The median of all valid values
+    /// @return median The median of all valid values (principal ordering: fairValue)
     function getMedianValues(string memory key) public view returns (MedianSet memory median) {
         (
             uint256[] memory fairValues,
@@ -201,9 +201,35 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
         _ensureThresholdMet(count);
 
-        bool isFairValueSort = _sortValues(fairValues, usdValues, nums, dens, timestamps, count);
+        // Sort by fairValue
+        _sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
 
-        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, isFairValueSort, threshold);
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, true, threshold);
+    }
+
+    /// @notice Get median values from all registered ValueStores, sorted by usdValue
+    /// @dev Same aggregation as getMedianValues but uses usdValue as the principal
+    ///      (sort/median) key instead of fairValue. Useful when fairValue may be
+    ///      absent (zero) but a usd-denominated median is still meaningful.
+    /// @param key The key to query from ValueStores
+    /// @return median The median of all valid values (principal ordering: usdValue)
+    function getMedianValuesByUsd(string memory key) public view returns (MedianSet memory median) {
+        (
+            uint256[] memory fairValues,
+            uint256[] memory usdValues,
+            uint256[] memory nums,
+            uint256[] memory dens,
+            uint256[] memory timestamps
+        ) = _initializeValueArrays();
+
+        uint256 count = _collectValues(key, fairValues, usdValues, nums, dens, timestamps);
+
+        _ensureThresholdMet(count);
+
+        // Sort by usdValue 
+        _sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
+
+        return _calculateMedian(fairValues, usdValues, nums, dens, timestamps, count, false, threshold);
     }
 
     /// @notice Initialize value arrays for collecting data from stores
@@ -276,42 +302,6 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         if (count < threshold) revert ThresholdNotMet(count, threshold);
     }
 
-    /// @notice Sort all value arrays by fairValue using iterative quicksort
-    /// @param fairValues Array of fair values to sort by
-    /// @param usdValues Array of USD values (sorted in parallel)
-    /// @param nums Array of numerators (sorted in parallel)
-    /// @param dens Array of denominators (sorted in parallel)
-    /// @param timestamps Array of timestamps (sorted in parallel)
-    /// @param count Number of elements to sort
-    function _sortValues(
-        uint256[] memory fairValues,
-        uint256[] memory usdValues,
-        uint256[] memory nums,
-        uint256[] memory dens,
-        uint256[] memory timestamps,
-        uint256 count
-    ) private pure returns (bool isFairValueSort) {
-        if (count == 0) return true; // Default/fallback: fairValue sort
-
-
-        bool anyFairNonZero = false;
-        for (uint256 i = 0; i < count; ++i) {
-            if (fairValues[i] != 0) {
-                anyFairNonZero = true;
-                break;
-            }
-        }
-
-        if (anyFairNonZero) {
-            _sortMultipleByReferenceWithTimestamps(fairValues, usdValues, nums, dens, timestamps, count);
-            return true; // Sorted by fairValues
-        } else {
-            _sortMultipleByReferenceWithTimestamps(usdValues, fairValues, nums, dens, timestamps, count);
-            return false; // Sorted by usdValues
-        }
-    }
-
-   
     error AllPrincipalEntriesZero();
 
     /// @notice Calculate the median of sorted value arrays
@@ -721,7 +711,11 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     }
 
     /// @notice Get a specific value type by parsing the key
-    /// @dev Key format: "action:asset" where action is fairValue/usdValue/numerator/denominator
+    /// @dev Key format: "action:asset" where action is fairValue/usdValue/numerator/denominator.
+    ///      The median is ALWAYS computed via getMedianValues, i.e. the rows are sorted by
+    ///      fairValue regardless of which action is requested. Even for the "usdValue" action,
+    ///      the returned usdValue is the one on the fairValue-median row (not a usd-sorted
+    ///      median). Use getMedianValuesByUsd directly if a usdValue-sorted median is needed.
     /// @param key The key to parse and query
     /// @return value The requested value
     /// @return timestamp The timestamp of the value
@@ -732,6 +726,7 @@ contract DIAOracleV3MetaFairValueField is Ownable {
             revert UnrecognizedAction();
         }
 
+        // Always sorts/aggregates by fairValue (fairValue-sorted median).
         MedianSet memory m = getMedianValues(assetKey);
 
         if (actionHash == _FAIR_VALUE) {

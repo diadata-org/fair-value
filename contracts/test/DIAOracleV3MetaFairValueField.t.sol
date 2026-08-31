@@ -921,8 +921,10 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
         }
     }
 
-    function test_SortByUsdValueWhenAllFairValuesAreZero() public {
-        // Test edge case: all fairValues are 0, should sort by usdValues
+    function test_AllFairValuesZero_Reverts() public {
+        // With the usdValue sort fallback removed, sorting is always by fairValue.
+        // When every fairValue is 0, the leading-zero skip leaves no contributing
+        // entries, so the call reverts AllPrincipalEntriesZero (no usd fallback).
         MockValueStore store1 = createMockStore();
         MockValueStore store2 = createMockStore();
         MockValueStore store3 = createMockStore();
@@ -930,26 +932,61 @@ contract GetMedianValuesEdgeCaseTest is BaseTest {
 
         uint256 timestamp = block.timestamp;
 
-        // All fairValues are 0, but usdValues differ
-        setStoreValues(store1, TEST_KEY, 0, 1000, 1, 1, timestamp);       // fairValue=0, usdValue=1000
-        setStoreValues(store2, TEST_KEY, 0, 2000, 2, 1, timestamp);       // fairValue=0, usdValue=2000
-        setStoreValues(store3, TEST_KEY, 0, 3000, 3, 1, timestamp);       // fairValue=0, usdValue=3000
-        setStoreValues(store4, TEST_KEY, 0, 4000, 4, 1, timestamp);       // fairValue=0, usdValue=4000
+        // All fairValues are 0, usdValues differ (previously would sort by usdValue)
+        setStoreValues(store1, TEST_KEY, 0, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 0, 2000, 2, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 0, 3000, 3, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 0, 4000, 4, 1, timestamp);
 
-        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
+        vm.expectRevert(DIAOracleV3MetaFairValueField.AllPrincipalEntriesZero.selector);
+        oracle.getMedianValues(TEST_KEY);
+    }
 
-        // Should sort by usdValues since all fairValues are 0
-        // Sorted usdValues: [1000, 2000, 3000, 4000]
-        // Corresponding numerators: [1, 2, 3, 4]
-        // Corresponding denominators: [1, 1, 1, 1]
-        // Median of even count: average of middle two (2000 + 3000 + 1) / 2 = 2500
-        // Numerator median: (2 + 3 + 1) / 2 = 3
-        // Denominator median: (1 + 1 + 1) / 2 = 1
-        assertEq(result.fairValue, 0, "All fairValues should be 0");
-        assertEq(result.usdValue, 2500, "Should be median of usdValues");
-        assertEq(result.numerator, 3, "Should be median: (2+3+1)/2 = 3");
-        assertEq(result.denominator, 1, "Should be median: (1+1+1)/2 = 1");
-        assertEq(result.timestamp, timestamp, "Should return max timestamp");
+    function test_GetMedianValuesByUsd_AllFairValuesZero() public {
+        // The explicit usd-sorted entry point still produces a median when all
+        // fairValues are 0 (this replaced the old implicit sort fallback).
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+        MockValueStore store4 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 0, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 0, 2000, 2, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 0, 3000, 3, 1, timestamp);
+        setStoreValues(store4, TEST_KEY, 0, 4000, 4, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValuesByUsd(TEST_KEY);
+
+        // Sorted by usdValue: [1000, 2000, 3000, 4000], even count -> average of
+        // the middle two: (2000 + 3000 + 1) / 2 = 2500; num (2+3+1)/2 = 3; den 1.
+        assertEq(result.fairValue, 0, "All fairValues are 0");
+        assertEq(result.usdValue, 2500, "Median of usdValues");
+        assertEq(result.numerator, 3, "Numerator median: (2+3+1)/2 = 3");
+        assertEq(result.denominator, 1, "Denominator median: (1+1+1)/2 = 1");
+        assertEq(result.timestamp, timestamp, "Max of middle-pair timestamps");
+    }
+
+    function test_GetMedianValuesByUsd_MatchesFairWhenBothSorted() public {
+        // When fairValue and usdValue impose the same ordering, both entry points
+        // select the same row; only the principal (sort key) differs.
+        MockValueStore store1 = createMockStore();
+        MockValueStore store2 = createMockStore();
+        MockValueStore store3 = createMockStore();
+
+        uint256 timestamp = block.timestamp;
+
+        setStoreValues(store1, TEST_KEY, 100, 1000, 1, 1, timestamp);
+        setStoreValues(store2, TEST_KEY, 200, 2000, 2, 1, timestamp);
+        setStoreValues(store3, TEST_KEY, 300, 3000, 3, 1, timestamp);
+
+        DIAOracleV3MetaFairValueField.MedianSet memory byFair = oracle.getMedianValues(TEST_KEY);
+        DIAOracleV3MetaFairValueField.MedianSet memory byUsd = oracle.getMedianValuesByUsd(TEST_KEY);
+
+        assertEq(byFair.fairValue, 200, "fair-sorted median row");
+        assertEq(byUsd.fairValue, 200, "usd-sorted picks the same middle row");
+        assertEq(byUsd.usdValue, 2000, "usd median");
     }
 }
 
@@ -1109,7 +1146,6 @@ contract NumeratorDenominatorTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // Sorting is done by usdValues 
         // Sorted by fairValue: [100, 200, 300, 400, 500]
         // Corresponding numerators: [1, 1, 2, 3, 1]
         // Corresponding denominators: [1, 2, 3, 4, 10]
@@ -2328,20 +2364,19 @@ contract DuplicateValuesPerformanceTest is BaseTest {
     }
 
     function test_DuplicateValues_ZeroValues() public {
-        // Edge case: all zero values
+        // Edge case: all zero fairValues. Sorting is always by fairValue, so the
+        // leading-zero skip removes every entry and the call reverts
+        // AllPrincipalEntriesZero (the usdValue sort fallback has been removed).
         uint256 numOracles = 100;
         uint256 timestamp = block.timestamp;
 
         for (uint256 i = 0; i < numOracles; i++) {
             MockValueStore store = createMockStore();
-            // All fairValues are 0, should sort by usdValue
             setStoreValues(store, TEST_KEY, 0, 5000, 1, 1, timestamp);
         }
 
-        DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
-
-        assertEq(result.fairValue, 0, "All zero fairValues should return 0");
-        assertEq(result.usdValue, 5000, "Should return usdValue median");
+        vm.expectRevert(DIAOracleV3MetaFairValueField.AllPrincipalEntriesZero.selector);
+        oracle.getMedianValues(TEST_KEY);
     }
 
     function test_DuplicateValues_MostlyZero() public {
@@ -2359,10 +2394,9 @@ contract DuplicateValuesPerformanceTest is BaseTest {
 
         DIAOracleV3MetaFairValueField.MedianSet memory result = oracle.getMedianValues(TEST_KEY);
 
-        // 90 zeros, 10 values of 1000
-        // When sorted by fairValue (all 0), then by usdValue
-        // Median should still have fairValue=0
-        assertEq(result.fairValue, 1000, "Median should have zero fairValue");
+        // 90 zeros, 10 values of 1000. Sorted by fairValue: [0 x90, 1000 x10].
+        // Leading zeros skipped -> contributing set is the ten 1000s -> median 1000.
+        assertEq(result.fairValue, 1000, "Median of the non-zero contributing set");
     }
 
     function testFuzz_DuplicateValues_Fuzz(uint128 numOracles) public {
