@@ -186,6 +186,10 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     }
 
     /// @notice Get median values from all registered ValueStores, sorted by fairValue
+    /// @dev fairValue is the principal (sort/median) key. If every collected entry has
+    ///      fairValue == 0, this reverts with AllPrincipalEntriesZero instead of
+    ///      silently switching sort semantics. Use getMedianValuesByUsd to aggregate
+    ///      by usdValue instead.
     /// @param key The key to query from ValueStores
     /// @return median The median of all valid values (principal ordering: fairValue)
     function getMedianValues(string memory key) public view returns (MedianSet memory median) {
@@ -209,8 +213,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
 
     /// @notice Get median values from all registered ValueStores, sorted by usdValue
     /// @dev Same aggregation as getMedianValues but uses usdValue as the principal
-    ///      (sort/median) key instead of fairValue. Useful when fairValue may be
-    ///      absent (zero) but a usd-denominated median is still meaningful.
+    ///      (sort/median) key instead of fairValue. For cases where fairValue is zero,
+    ///      getMedianValues/getValue revert with AllPrincipalEntriesZero; the attestor
+    ///      service reads such keys via this function.
     /// @param key The key to query from ValueStores
     /// @return median The median of all valid values (principal ordering: usdValue)
     function getMedianValuesByUsd(string memory key) public view returns (MedianSet memory median) {
@@ -300,6 +305,9 @@ contract DIAOracleV3MetaFairValueField is Ownable {
         if (count < threshold) revert ThresholdNotMet(count, threshold);
     }
 
+    /// @notice Thrown when every collected entry has a zero principal (sort) value:
+    ///         all fairValues zero on a fairValue-sorted read (getMedianValues/getValue)
+    ///         or all usdValues zero on a usdValue-sorted read (getMedianValuesByUsd).
     error AllPrincipalEntriesZero();
 
     /// @notice Calculate the median of sorted value arrays
@@ -714,6 +722,13 @@ contract DIAOracleV3MetaFairValueField is Ownable {
     ///      fairValue regardless of which action is requested. Even for the "usdValue" action,
     ///      the returned usdValue is the one on the fairValue-median row (not a usd-sorted
     ///      median). Use getMedianValuesByUsd directly if a usdValue-sorted median is needed.
+    ///      Valid actions per asset class:
+    ///      - Single-reserve assets (stores publish non-zero fairValue): all four actions
+    ///        (fairValue/usdValue/numerator/denominator) are valid and are served from the
+    ///        fairValue-sorted median row.
+    ///      - Multi-reserve assets (fairValue is always zero): no getValue action is valid —
+    ///        every action, including usdValue, numerator and denominator, reverts with
+    ///        AllPrincipalEntriesZero. Read these assets via getMedianValuesByUsd.
     /// @param key The key to parse and query
     /// @return value The requested value
     /// @return timestamp The timestamp of the value
